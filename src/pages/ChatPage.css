@@ -1,13 +1,13 @@
 .chat-container {
   display: flex;
-  height: 90vh; /* Занимает почти всю высоту экрана */
+  height: 90vh;
   border: 1px solid #ccc;
 }
 
 .chat-list {
   width: 30%;
   border-right: 1px solid #ccc;
-  overflow-y: auto; /* Для прокрутки, если чатов много */
+  overflow-y: auto;
 }
 
 .chat-item {
@@ -32,18 +32,50 @@
 }
 
 .messages-list {
-  flex-grow: 1; /* Занимает все доступное пространство */
+  flex-grow: 1;
   overflow-y: auto;
   margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+}
+
+.message-row {
+  display: flex;
+  margin-bottom: 10px;
+}
+
+.message-row.own {
+  justify-content: flex-end;
+}
+
+.message-row.other {
+  justify-content: flex-start;
 }
 
 .message {
-  margin-bottom: 10px;
-  padding: 8px 12px;
-  background-color: #f1f1f1;
+  padding: 8px 14px;
   border-radius: 18px;
-  max-width: 60%;
+  max-width: 70%;
   word-wrap: break-word;
+}
+
+.message-row.own .message {
+  background-color: #007bff;
+  color: white;
+}
+
+.message-row.other .message {
+  background-color: #e9e9eb;
+  color: black;
+}
+
+.message p {
+  margin: 0 0 4px 0;
+}
+
+.message small {
+  font-size: 0.75em;
+  opacity: 0.8;
 }
 
 .modal-backdrop {

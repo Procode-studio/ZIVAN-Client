@@ -2,14 +2,12 @@ import { useEffect, useRef, useCallback } from 'react';
 import io from 'socket.io-client';
 
 export const useSocket = (onNewMessage) => {
-  // useRef используется для хранения экземпляра сокета, чтобы он не пересоздавался при каждом рендере
   const socketRef = useRef(null);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token) return;
 
-    // Инициализируем соединение, передавая токен для аутентификации
     socketRef.current = io(process.env.REACT_APP_API_URL, {
       auth: {
         token: token,
@@ -18,7 +16,6 @@ export const useSocket = (onNewMessage) => {
 
     const socket = socketRef.current;
 
-    // --- Слушатели событий ---
     socket.on('connect', () => {
       console.log('Socket.IO подключен:', socket.id);
     });
@@ -27,23 +24,28 @@ export const useSocket = (onNewMessage) => {
       console.log('Socket.IO отключен');
     });
 
-    // Слушаем событие 'newMessage' от сервера
     socket.on('newMessage', (message) => {
       console.log('Получено новое сообщение:', message);
       if (onNewMessage) {
         onNewMessage(message);
       }
     });
+	
+	socket.on('userTyping', (data) => {
+      if (onUserTyping) onUserTyping(data);
+    });
 
-    // --- Очистка при размонтировании компонента ---
+    socket.on('userStoppedTyping', (data) => {
+      if (onUserStoppedTyping) onUserStoppedTyping(data);
+    });
+
     return () => {
       if (socket) {
         socket.disconnect();
       }
     };
-  }, [onNewMessage]);
+  }, [onNewMessage, onUserTyping, onUserStoppedTyping]);
 
-  // --- Функции для отправки событий на сервер ---
   const joinRoom = useCallback((chatId) => {
     socketRef.current?.emit('joinRoom', chatId);
   }, []);
@@ -51,6 +53,14 @@ export const useSocket = (onNewMessage) => {
   const sendMessage = useCallback((messageData) => {
     socketRef.current?.emit('sendMessage', messageData);
   }, []);
+  
+  const startTyping = useCallback((chatId) => {
+    socketRef.current?.emit('startTyping', { chatId });
+  }, []);
 
-  return { joinRoom, sendMessage };
+  const stopTyping = useCallback((chatId) => {
+    socketRef.current?.emit('stopTyping', { chatId });
+  }, []);
+
+  return { joinRoom, sendMessage, startTyping, stopTyping };
 };

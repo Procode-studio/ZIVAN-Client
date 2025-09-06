@@ -4,31 +4,34 @@ import LoginPage from './pages/LoginPage';
 import ChatPage from './pages/ChatPage';
 import './App.css';
 
-// Маленький компонент-помощник для защищенных роутов
-const PrivateRoute = ({ children }) => {
+const getUserIdFromToken = () => {
   const token = localStorage.getItem('token');
-  return token ? children : <Navigate to="/login" />;
+  if (!token) return null;
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return payload.user.id;
+  } catch (error) {
+    console.error('Failed to decode token:', error);
+    return null;
+  }
 };
 
 function App() {
+  const userId = getUserIdFromToken();
+
   return (
     <Router>
       <div className="App">
         <Routes>
-          {/* Если пользователь заходит на /login, показываем LoginPage */}
           <Route path="/login" element={<LoginPage />} />
-
-          {/* Если пользователь заходит на /chat, используем PrivateRoute */}
           <Route
             path="/chat"
             element={
-              <PrivateRoute>
+              <PrivateRoute userId={userId}>
                 <ChatPage />
               </PrivateRoute>
             }
           />
-
-          {/* Если пользователь заходит на главную страницу /, перенаправляем его */}
           <Route path="/" element={<Navigate to="/chat" />} />
         </Routes>
       </div>
