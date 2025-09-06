@@ -3,17 +3,16 @@ import Peer from 'simple-peer';
 import { getChats, getMessages } from '../api/chatApi';
 import { useSocket } from '../hooks/useSocket';
 import CreateChatModal from '../components/CreateChatModal';
+import CallWindow from '../components/CallWindow'; // <-- ИМПОРТ
 import './ChatPage.css';
 
 function ChatPage({ userId }) {
-  // Состояния чата
   const [chats, setChats] = useState([]);
   const [selectedChat, setSelectedChat] = useState(null);
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   
-  // Состояния звонка
   const [stream, setStream] = useState(null);
   const [receivingCall, setReceivingCall] = useState(false);
   const [callerInfo, setCallerInfo] = useState({ from: null, signal: null });
@@ -32,14 +31,12 @@ function ChatPage({ userId }) {
 
   const { joinRoom, sendMessage, socket } = useSocket(handleNewMessage);
 
-  // --- ЕДИНЫЙ ОБРАБОТЧИК СОБЫТИЙ SOCKET.IO ---
   useEffect(() => {
     if (socket) {
       socket.on("hey", (data) => {
         setReceivingCall(true);
         setCallerInfo({ from: data.from, signal: data.signal });
       });
-
       socket.on("callAccepted", (signal) => {
         setCallAccepted(true);
         if (connectionRef.current) {
@@ -47,7 +44,6 @@ function ChatPage({ userId }) {
         }
       });
     }
-    // Очистка слушателей при размонтировании
     return () => {
       if (socket) {
         socket.off("hey");
@@ -83,7 +79,6 @@ function ChatPage({ userId }) {
     try {
       const currentStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       setStream(currentStream);
-      if (myVideo.current) myVideo.current.srcObject = currentStream;
       return currentStream;
     } catch (err) {
       console.error("Ошибка доступа к камере:", err);
@@ -102,8 +97,11 @@ function ChatPage({ userId }) {
       socket.emit("callUser", { userToCall: idToCall, signalData: data, from: userId });
     });
 
+    // --- ИСПРАВЛЕНИЕ ПРОБЛЕМЫ С ВИДЕО ---
     peer.on("stream", (stream) => {
-      if (userVideo.current) userVideo.current.srcObject = stream;
+      if (userVideo.current) {
+        userVideo.current.srcObject = stream;
+      }
     });
   };
 
@@ -121,8 +119,11 @@ function ChatPage({ userId }) {
       socket.emit("acceptCall", { signal: data, to: callerInfo.from });
     });
 
+    // --- ИСПРАВЛЕНИЕ ПРОБЛЕМЫ С ВИДЕО ---
     peer.on("stream", (stream) => {
-      if (userVideo.current) userVideo.current.srcObject = stream;
+      if (userVideo.current) {
+        userVideo.current.srcObject = stream;
+      }
     });
 
     peer.signal(callerInfo.signal);
@@ -144,6 +145,15 @@ function ChatPage({ userId }) {
 
   return (
     <div>
+      {callAccepted && (
+        <CallWindow
+          stream={stream}
+          myVideoRef={myVideo}
+          userVideoRef={userVideo}
+          onLeaveCall={leaveCall}
+        />
+      )}
+
       <h1>ZIVAN <button onClick={() => { localStorage.removeItem('token'); window.location.href = '/login'; }}>Выйти</button></h1>
       <button onClick={() => setIsModalOpen(true)}>+ Новый чат</button>
       {isModalOpen && <CreateChatModal onClose={() => setIsModalOpen(false)} onChatCreated={() => getChats().then(setChats)} />}
@@ -162,16 +172,9 @@ function ChatPage({ userId }) {
               <div className="chat-header">
                 <h2>{selectedChat.name || `Чат #${selectedChat.id}`}</h2>
                 {selectedChat.type === 'private' && otherUserId && !callAccepted && !receivingCall && (
-                  <button onClick={() => callUser(otherUserId)}>Позвонить</button>
+                  <button onClick={() => callUser(otherUserId)}>📞 Позвонить</button>
                 )}
-                {(callAccepted || stream) && <button onClick={leaveCall}>Завершить звонок</button>}
               </div>
-
-              <div className="video-container">
-                {stream && <video playsInline muted ref={myVideo} autoPlay style={{ width: "200px" }} />}
-                {callAccepted && <video playsInline ref={userVideo} autoPlay style={{ width: "200px" }} />}
-              </div>
-
               <div className="messages-list">
                 {messages.map(msg => {
                   const isOwnMessage = msg.sender_id === userId;
