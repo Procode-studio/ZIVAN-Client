@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { getChats, getMessages } from '../api/chatApi';
-import { useSocket } from '../hooks/useSocket'; // <-- Импортируем наш хук
+import { useSocket } from '../hooks/useSocket';
+import CreateChatModal from '../components/CreateChatModal';
 import './ChatPage.css';
 
 function ChatPage() {
@@ -12,11 +13,9 @@ function ChatPage() {
   const [messages, setMessages] = useState([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
   
-  const [newMessage, setNewMessage] = useState(''); // <-- Состояние для нового сообщения
-
-  // --- ИНТЕГРАЦИЯ SOCKET.IO ---
+  const [newMessage, setNewMessage] = useState('');
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const handleNewMessage = useCallback((message) => {
-    // Добавляем новое сообщение в список, только если оно для текущего открытого чата
     if (selectedChat && message.chat_id === selectedChat.id) {
       setMessages((prevMessages) => [...prevMessages, message]);
     }
@@ -47,7 +46,7 @@ function ChatPage() {
     try {
       const chatMessages = await getMessages(chat.id);
       setMessages(chatMessages);
-      joinRoom(chat.id); // <-- Присоединяемся к комнате чата через сокет
+      joinRoom(chat.id);
     } catch (err) {
       setError('Не удалось загрузить сообщения.');
     } finally {
@@ -62,7 +61,7 @@ function ChatPage() {
         chatId: selectedChat.id,
         content: newMessage,
       });
-      setNewMessage(''); // Очищаем поле ввода
+      setNewMessage('');
     }
   };
 
@@ -73,10 +72,29 @@ function ChatPage() {
 
   if (chatsLoading) return <div>Загрузка чатов...</div>;
   if (error) return <div style={{ color: 'red' }}>{error}</div>;
+  
+   const handleChatCreated = async () => {
+    // Просто перезагружаем список чатов
+    setChatsLoading(true);
+    const userChats = await getChats();
+    setChats(userChats);
+    setChatsLoading(false);
+  };
+
 
   return (
     <div>
       <h1>Мессенджер <button onClick={handleLogout}>Выйти</button></h1>
+	  
+      <button onClick={() => setIsModalOpen(true)}>+ Новый чат</button>
+
+      {isModalOpen && (
+        <CreateChatModal
+          onClose={() => setIsModalOpen(false)}
+          onChatCreated={handleChatCreated}
+        />
+      )}
+	  
       <div className="chat-container">
         <div className="chat-list">
           {chats.map(chat => (
@@ -101,7 +119,6 @@ function ChatPage() {
                   </div>
                 ))}
               </div>
-              {/* --- РАБОТАЮЩАЯ ФОРМА --- */}
               <form onSubmit={handleSendMessage}>
                 <input
                   type="text"
