@@ -18,6 +18,15 @@ function ChatPage({ userId }) {
 
   const [typingUsers, setTypingUsers] = useState([]);
   const typingTimeoutRef = useRef(null);
+  const messagesEndRef = useRef(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
 
   const handleNewMessage = useCallback((message) => {
     if (selectedChat && message.chat_id === selectedChat.id) {
@@ -129,19 +138,15 @@ function ChatPage({ userId }) {
       )}
       <div className="chat-container">
         <div className="chat-list">
-          {chats.length > 0 ? (
-            chats.map(chat => (
-              <div
-                key={chat.id}
-                className={`chat-item ${selectedChat?.id === chat.id ? 'selected' : ''}`}
-                onClick={() => handleSelectChat(chat)}
-              >
-                <h3>{chat.name || `Чат #${chat.id}`}</h3>
-              </div>
-            ))
-          ) : (
-            <p>У вас пока нет чатов.</p>
-          )}
+          {chats.map(chat => (
+            <div
+              key={chat.id}
+              className={`chat-item ${selectedChat?.id === chat.id ? 'selected' : ''}`}
+              onClick={() => handleSelectChat(chat)}
+            >
+              <h3>{chat.name || `Чат #${chat.id}`}</h3>
+            </div>
+          ))}
         </div>
         <div className="message-view">
           {selectedChat ? (
@@ -159,6 +164,7 @@ function ChatPage({ userId }) {
                     </div>
                   );
                 })}
+                <div ref={messagesEndRef} />
               </div>
               <div className="typing-indicator">
                 {typingUsers.length > 0 && (
