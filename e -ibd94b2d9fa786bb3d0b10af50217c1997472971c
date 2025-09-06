@@ -1,0 +1,113 @@
+[33mcommit bd94b2d9fa786bb3d0b10af50217c1997472971c[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m
+Author: Ivan <vanozdar23@gmail.com>
+Date:   Sat Sep 6 23:55:00 2025 +0500
+
+    Feat: Move Twilio credentials to environment variables
+
+[33mcommit 803e3c955958b4e54b022f676ce0d97925dfae4a[m
+Author: Ivan <vanozdar23@gmail.com>
+Date:   Sat Sep 6 23:48:39 2025 +0500
+
+    first
+
+[33mcommit f826e6000975f29a762f28272803fdc1f706f692[m[33m ([m[1;31morigin/main[m[33m)[m
+Author: Ivan <vanozdar23@gmail.com>
+Date:   Sat Sep 6 23:32:48 2025 +0500
+
+    first
+
+[33mcommit 9fa3cb1c9385db05f52af8742a188d2e6b3e5ca8[m
+Author: Ivan <vanozdar23@gmail.com>
+Date:   Sat Sep 6 23:24:27 2025 +0500
+
+    first
+
+[33mcommit 1793ccae4d53bedac8e8b2efea92d662826ae8f5[m
+Author: Ivan <vanozdar23@gmail.com>
+Date:   Sat Sep 6 23:16:26 2025 +0500
+
+    first
+
+[33mcommit 74c2dc05ea8331f5f966cfed325d39b9d03cabd4[m
+Author: Ivan <vanozdar23@gmail.com>
+Date:   Sat Sep 6 23:03:40 2025 +0500
+
+    first
+
+[33mcommit dc54416891a8a86f349c207d7cdef7103e9d7cf7[m
+Author: Ivan <vanozdar23@gmail.com>
+Date:   Sat Sep 6 22:55:52 2025 +0500
+
+    first
+
+[33mcommit 7e6715539cd5e33789171c844ff5223af37c7c4f[m
+Author: Ivan <vanozdar23@gmail.com>
+Date:   Sat Sep 6 20:12:48 2025 +0500
+
+    first
+
+[33mcommit 4e81b5e6dc199630b9259f17b50792a479aa6168[m
+Author: Ivan <vanozdar23@gmail.com>
+Date:   Sat Sep 6 20:02:47 2025 +0500
+
+    first
+
+[33mcommit f42bcb8de17305dde7e8d3079c12dfd756e9b995[m
+Author: Ivan <vanozdar23@gmail.com>
+Date:   Sat Sep 6 20:00:03 2025 +0500
+
+    first
+
+[33mcommit e0c245fb16d86f2d9bb574135a2822b482548337[m
+Author: Ivan <vanozdar23@gmail.com>
+Date:   Sat Sep 6 19:54:06 2025 +0500
+
+    first
+
+[33mcommit 861ca0c4c9b26488120555239297d9c8af4b9887[m
+Author: Ivan <vanozdar23@gmail.com>
+Date:   Sat Sep 6 19:23:23 2025 +0500
+
+    first
+
+[33mcommit 73404c19bd5436eb1660c5f361cd8ba07b38410d[m
+Author: Ivan <vanozdar23@gmail.com>
+Date:   Sat Sep 6 19:22:32 2025 +0500
+
+    first
+
+[33mcommit 18167a1c9f2524823109ddce0315a041e2143686[m
+Author: Ivan <vanozdar23@gmail.com>
+Date:   Sat Sep 6 19:14:07 2025 +0500
+
+    MVP ready
+
+[33mcommit c5ec905a5bf2f499ded8560f5498e8dcd4f3a62c[m
+Author: Ivan <vanozdar23@gmail.com>
+Date:   Sat Sep 6 18:49:59 2025 +0500
+
+    MVP ready
+
+[33mcommit c38ab0984b4c2e831d5b2a5ee92d8a52394be218[m
+Author: Ivan <vanozdar23@gmail.com>
+Date:   Sat Sep 6 18:07:43 2025 +0500
+
+    Feat: Display user's chat list on ChatPage
+
+[33mcommit d651a6f228c4b7ad66184c266aba145ef3a5873f[m
+Author: Ivan <vanozdar23@gmail.com>
+Date:   Sat Sep 6 17:51:50 2025 +0500
+
+    Feat: Implement login and registration page
+
+[33mcommit 7ba54f9eb71f06f4c41a2f079742b36ed1c3daed[m
+Author: Ivan <vanozdar23@gmail.com>
+Date:   Sat Sep 6 17:32:36 2025 +0500
+
+    Initial React project setup
+
+[33mcommit 53a464f6dfb819ad01c3d1e4b1ba346a19bfbef2[m
+Author: Ivan <vanozdar23@gmail.com>
+Date:   Sat Sep 6 17:28:21 2025 +0500
+
+    Initialize project using Create React App

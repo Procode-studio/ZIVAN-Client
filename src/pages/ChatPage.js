@@ -3,8 +3,21 @@ import Peer from 'simple-peer';
 import { getChats, getMessages } from '../api/chatApi';
 import { useSocket } from '../hooks/useSocket';
 import CreateChatModal from '../components/CreateChatModal';
-import CallWindow from '../components/CallWindow'; // <-- ИМПОРТ
+import CallWindow from '../components/CallWindow';
 import './ChatPage.css';
+
+const peerConfig = {
+  iceServers: [
+    {
+      urls: 'stun:stun.l.google.com:19302'
+    },
+    {
+      urls: 'turn:global.turn.twilio.com:3478?transport=udp',
+      username: process.env.REACT_APP_TWILIO_SID,
+      credential: process.env.REACT_APP_TWILIO_TOKEN
+    },
+  ]
+};
 
 function ChatPage({ userId }) {
   const [chats, setChats] = useState([]);
@@ -12,7 +25,6 @@ function ChatPage({ userId }) {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
-  
   const [stream, setStream] = useState(null);
   const [receivingCall, setReceivingCall] = useState(false);
   const [callerInfo, setCallerInfo] = useState({ from: null, signal: null });
@@ -52,13 +64,8 @@ function ChatPage({ userId }) {
     };
   }, [socket]);
 
-  useEffect(() => {
-    getChats().then(setChats);
-  }, []);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  useEffect(() => { getChats().then(setChats); }, []);
+  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
   const handleSelectChat = async (chat) => {
     setSelectedChat(chat);
@@ -90,18 +97,19 @@ function ChatPage({ userId }) {
     const currentStream = await startStream();
     if (!currentStream) return;
 
-    const peer = new Peer({ initiator: true, trickle: false, stream: currentStream });
+    const peer = new Peer({ 
+      initiator: true, 
+      trickle: false, 
+      stream: currentStream,
+      config: peerConfig 
+    });
     connectionRef.current = peer;
 
     peer.on("signal", (data) => {
       socket.emit("callUser", { userToCall: idToCall, signalData: data, from: userId });
     });
-
-    // --- ИСПРАВЛЕНИЕ ПРОБЛЕМЫ С ВИДЕО ---
     peer.on("stream", (stream) => {
-      if (userVideo.current) {
-        userVideo.current.srcObject = stream;
-      }
+      if (userVideo.current) userVideo.current.srcObject = stream;
     });
   };
 
@@ -112,18 +120,19 @@ function ChatPage({ userId }) {
     const currentStream = await startStream();
     if (!currentStream) return;
 
-    const peer = new Peer({ initiator: false, trickle: false, stream: currentStream });
+    const peer = new Peer({ 
+      initiator: false, 
+      trickle: false, 
+      stream: currentStream,
+      config: peerConfig
+    });
     connectionRef.current = peer;
 
     peer.on("signal", (data) => {
       socket.emit("acceptCall", { signal: data, to: callerInfo.from });
     });
-
-    // --- ИСПРАВЛЕНИЕ ПРОБЛЕМЫ С ВИДЕО ---
     peer.on("stream", (stream) => {
-      if (userVideo.current) {
-        userVideo.current.srcObject = stream;
-      }
+      if (userVideo.current) userVideo.current.srcObject = stream;
     });
 
     peer.signal(callerInfo.signal);
@@ -132,12 +141,8 @@ function ChatPage({ userId }) {
   const leaveCall = () => {
     setCallAccepted(false);
     setReceivingCall(false);
-    if (connectionRef.current) {
-      connectionRef.current.destroy();
-    }
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop());
-    }
+    if (connectionRef.current) connectionRef.current.destroy();
+    if (stream) stream.getTracks().forEach(track => track.stop());
     setStream(null);
   };
 
@@ -153,11 +158,9 @@ function ChatPage({ userId }) {
           onLeaveCall={leaveCall}
         />
       )}
-
       <h1>ZIVAN <button onClick={() => { localStorage.removeItem('token'); window.location.href = '/login'; }}>Выйти</button></h1>
       <button onClick={() => setIsModalOpen(true)}>+ Новый чат</button>
       {isModalOpen && <CreateChatModal onClose={() => setIsModalOpen(false)} onChatCreated={() => getChats().then(setChats)} />}
-      
       <div className="chat-container">
         <div className="chat-list">
           {chats.map(chat => (
@@ -196,7 +199,6 @@ function ChatPage({ userId }) {
           )}
         </div>
       </div>
-
       {receivingCall && !callAccepted && (
         <div className="caller-notification">
           <h1>Вам звонит пользователь {callerInfo.from}</h1>
