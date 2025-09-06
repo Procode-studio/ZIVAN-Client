@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import io from 'socket.io-client';
 
-export const useSocket = (onNewMessage) => {
+export const useSocket = (onNewMessage, onUserTyping, onUserStoppedTyping) => {
   const socketRef = useRef(null);
 
   useEffect(() => {
@@ -25,18 +25,21 @@ export const useSocket = (onNewMessage) => {
     });
 
     socket.on('newMessage', (message) => {
-      console.log('Получено новое сообщение:', message);
       if (onNewMessage) {
         onNewMessage(message);
       }
     });
-	
-	socket.on('userTyping', (data) => {
-      if (onUserTyping) onUserTyping(data);
+
+    socket.on('userTyping', (data) => {
+      if (onUserTyping) {
+        onUserTyping(data);
+      }
     });
 
     socket.on('userStoppedTyping', (data) => {
-      if (onUserStoppedTyping) onUserStoppedTyping(data);
+      if (onUserStoppedTyping) {
+        onUserStoppedTyping(data);
+      }
     });
 
     return () => {
@@ -53,7 +56,7 @@ export const useSocket = (onNewMessage) => {
   const sendMessage = useCallback((messageData) => {
     socketRef.current?.emit('sendMessage', messageData);
   }, []);
-  
+
   const startTyping = useCallback((chatId) => {
     socketRef.current?.emit('startTyping', { chatId });
   }, []);

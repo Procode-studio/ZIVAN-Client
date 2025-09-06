@@ -16,6 +16,11 @@ const getUserIdFromToken = () => {
   }
 };
 
+const PrivateRoute = ({ children, userId }) => {
+  const token = localStorage.getItem('token');
+  return token ? React.cloneElement(children, { userId }) : <Navigate to="/login" />;
+};
+
 function App() {
   const userId = getUserIdFromToken();
 
