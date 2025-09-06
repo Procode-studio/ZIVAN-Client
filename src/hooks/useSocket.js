@@ -65,5 +65,5 @@ export const useSocket = (onNewMessage, onUserTyping, onUserStoppedTyping) => {
     socketRef.current?.emit('stopTyping', { chatId });
   }, []);
 
-  return { joinRoom, sendMessage, startTyping, stopTyping };
+  return { joinRoom, sendMessage, startTyping, stopTyping, socket: socketRef.current };
 };

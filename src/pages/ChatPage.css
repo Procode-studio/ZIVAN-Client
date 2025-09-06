@@ -96,3 +96,20 @@
   border-radius: 8px;
   width: 500px;
 }
+
+.video-container {
+  display: flex;
+  gap: 10px;
+  padding: 10px;
+}
+
+.caller-notification {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  padding: 20px;
+  background-color: white;
+  border: 1px solid black;
+  border-radius: 8px;
+  z-index: 100;
+}
