@@ -12,6 +12,7 @@ export const useSocket = (onNewMessage, onUserTyping, onUserStoppedTyping) => {
       auth: {
         token: token,
       },
+	   transports: ['websocket', 'polling'],
     });
 
     const socket = socketRef.current;
