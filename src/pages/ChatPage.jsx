@@ -38,24 +38,26 @@ function ChatPage({ userId }) {
   useEffect(() => {
     if (socket) {
       socket.on("hey", (data) => {
+        const chatWithCaller = chats.find(chat => chat.members.some(m => m.id === data.from));
+        const callerName = chatWithCaller?.members.find(m => m.id === data.from)?.username || 'Unknown Caller';
+        setCallerInfo({ from: data.from, signal: data.signal, fromName: callerName });
         setReceivingCall(true);
-        setCallerInfo({ from: data.from, signal: data.signal });
       });
       socket.on("callAccepted", (signal) => {
-        setIsCalling(false); // <-- Убираем "Вызов...", так как пришел ответ
+        setIsCalling(false);
         setCallAccepted(true);
-        if (connectionRef.current) {
-          connectionRef.current.signal(signal);
-        }
+        connectionRef.current.signal(signal);
       });
+      socket.on("callEnded", leaveCall);
     }
     return () => {
       if (socket) {
         socket.off("hey");
         socket.off("callAccepted");
+        socket.off("callEnded");
       }
     };
-  }, [socket]);
+  }, [socket, chats]);
 
   useEffect(() => { getChats().then(setChats); }, []);
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
@@ -67,72 +69,62 @@ function ChatPage({ userId }) {
     joinRoom(chat.id);
   };
 
-  const handleSendMessage = (e) => {
-    e.preventDefault();
-    if (newMessage.trim() && selectedChat) {
-      sendMessage({ chatId: selectedChat.id, content: newMessage });
-      setNewMessage('');
-    }
-  };
-
-  const startStream = async () => {
+  const startStream = async (cameraOn = false) => {
     try {
-      const currentStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      const currentStream = await navigator.mediaDevices.getUserMedia({ video: cameraOn, audio: true });
       setStream(currentStream);
       return currentStream;
     } catch (err) {
-      // --- УЛУЧШЕНИЕ: Обработка ошибки ---
-      console.error("Ошибка доступа к камере/микрофону:", err);
-      alert("Не удалось получить доступ к камере или микрофону. Проверьте разрешения в браузере.");
+      alert("Не удалось получить доступ к микрофону. Проверьте разрешения.");
       return null;
     }
   };
 
   const callUser = async (idToCall) => {
-    const currentStream = await startStream();
-    if (!currentStream) return; // Если пользователь не дал доступ, выходим
-
-    setIsCalling(true); // <-- НОВОЕ: Показываем "Вызов..."
-    const peer = new Peer({ initiator: true, trickle: false, stream: currentStream });
+    const currentStream = await startStream(true); 
+    if (!currentStream) return;
+    setIsCalling(true);
+    
+    const peer = new Peer({ initiator: true, trickle: false, stream: currentStream, config: peerConfig });
     connectionRef.current = peer;
 
-    peer.on("signal", (data) => {
-      socket.emit("callUser", { userToCall: idToCall, signalData: data, from: userId });
-    });
-    peer.on("stream", (stream) => {
-      if (userVideo.current) userVideo.current.srcObject = stream;
-    });
+    peer.on("signal", (data) => socket.emit("callUser", { userToCall: idToCall, signalData: data, from: userId }));
+    peer.on("stream", setPeerStream);
+    peer.on("close", leaveCall);
+    peer.on("error", leaveCall);
   };
 
   const answerCall = async () => {
-    const currentStream = await startStream();
+    setReceivingCall(false);
+    setCallAccepted(true);
+    const currentStream = await startStream(true);
     if (!currentStream) return;
 
-    setCallAccepted(true);
-    setReceivingCall(false);
-    const peer = new Peer({ initiator: false, trickle: false, stream: currentStream });
+    const peer = new Peer({ initiator: false, trickle: false, stream: currentStream, config: peerConfig });
     connectionRef.current = peer;
 
-    peer.on("signal", (data) => {
-      socket.emit("acceptCall", { signal: data, to: callerInfo.from });
-    });
-    peer.on("stream", (stream) => {
-      if (userVideo.current) userVideo.current.srcObject = stream;
-    });
-
+    peer.on("signal", (data) => socket.emit("acceptCall", { signal: data, to: callerInfo.from }));
+    peer.on("stream", setPeerStream);
+    peer.on("close", leaveCall);
+    peer.on("error", leaveCall);
     peer.signal(callerInfo.signal);
   };
 
   const leaveCall = () => {
-    setCallAccepted(false);
-    setReceivingCall(false);
-    setIsCalling(false); // <-- Сбрасываем состояние "Вызов..."
-    if (connectionRef.current) connectionRef.current.destroy();
+    if (connectionRef.current) {
+      const otherUserId = selectedChat?.members.find(m => m.id !== userId)?.id || callerInfo.from;
+      if (otherUserId) socket.emit("endCall", { to: otherUserId });
+      connectionRef.current.destroy();
+    }
     if (stream) stream.getTracks().forEach(track => track.stop());
     setStream(null);
+    setPeerStream(null);
+    setCallAccepted(false);
+    setIsCalling(false);
+    setReceivingCall(false);
   };
 
-  const otherUserId = selectedChat?.members.find(id => id !== userId);
+  const otherUser = selectedChat?.members.find(m => m.id !== userId);
 
   return (
     <div>
@@ -156,7 +148,6 @@ function ChatPage({ userId }) {
             <>
               <div className="chat-header">
                 <h2>{selectedChat.name || `Чат #${selectedChat.id}`}</h2>
-                {/* --- УЛУЧШЕНИЕ: Логика отображения кнопок --- */}
                 {selectedChat.type === 'private' && otherUserId && !isCalling && !callAccepted && !receivingCall && (
                   <button onClick={() => callUser(otherUserId)}>📞 Позвонить</button>
                 )}
@@ -186,8 +177,9 @@ function ChatPage({ userId }) {
 
       {receivingCall && !callAccepted && (
         <div className="caller-notification">
-          <h1>Вам звонит пользователь {callerInfo.from}</h1>
-          <button onClick={answerCall}>Ответить</button>
+          <h1>Вам звонит {callerInfo.fromName}</h1>
+          <button onClick={answerCall}>✅</button>
+          <button onClick={() => setReceivingCall(false)}>❌</button>
         </div>
       )}
     </div>
