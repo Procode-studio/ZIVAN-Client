@@ -117,13 +117,11 @@ function ChatPage({ userId }) {
 		  socket.off('updateOnlineUsers');
 		}
 	  };
-	}, [socket, chats, leaveCall]);
+	}, [socket, chats]);
 
-  // Эффекты для загрузки чатов и авто-прокрутки
   useEffect(() => { getChats().then(setChats); }, []);
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
-  // Обработчик выбора чата
   const handleSelectChat = async (chat) => {
     setSelectedChat(chat);
     setMessages([]);
@@ -132,7 +130,6 @@ function ChatPage({ userId }) {
     joinRoom(chat.id);
   };
 
-  // Обработчик отправки сообщения
   const handleSendMessage = (e) => {
     e.preventDefault();
     if (newMessage.trim() && selectedChat) {
@@ -141,7 +138,6 @@ function ChatPage({ userId }) {
     }
   };
 
-  // Функция для получения доступа к камере/микрофону
   const startStream = async (cameraOn = false) => {
     try {
       const currentStream = await navigator.mediaDevices.getUserMedia({ video: cameraOn, audio: true });
@@ -183,7 +179,7 @@ function ChatPage({ userId }) {
     peer.signal(callerInfo.signal);
   };
 
-  const leaveCall = useCallback(() => {
+const leaveCall = () => {
   if (connectionRef.current) {
     const otherUserInCall = selectedChat?.members.find(m => m.id !== userId) || { id: callerInfo.from };
     if (otherUserInCall.id) {
@@ -195,7 +191,6 @@ function ChatPage({ userId }) {
     stream.getTracks().forEach(track => track.stop());
   }
   
-  // Полный сброс всех состояний
   setStream(null);
   setPeerStream(null);
   setCallAccepted(false);
@@ -204,7 +199,7 @@ function ChatPage({ userId }) {
   setIsCallMinimized(false);
   setCallerInfo({ from: null, signal: null, fromName: '' });
   connectionRef.current = null;
-}, [socket, stream, selectedChat, userId, callerInfo.from]);
+};
 
   const otherUser = selectedChat?.members.find(m => m.id !== userId);
   const isOtherUserOnline = otherUser ? onlineUsers.has(otherUser.id) : false;
@@ -300,5 +295,6 @@ function ChatPage({ userId }) {
       )}
     </div>
   );
+}
 
 export default ChatPage;
