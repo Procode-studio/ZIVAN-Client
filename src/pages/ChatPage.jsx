@@ -11,17 +11,14 @@ import './ChatPage.css';
 const peerConfig = {
   iceServers: [
     {
-      urls: [
-		"stun:stun.l.google.com:19302",
-        "stun:stun.openrelay.metered.ca:80",
-        "turn:openrelay.metered.ca:80",
-        "turn:openrelay.metered.ca:443",
-        "turn:openrelay.metered.ca:443?transport=tcp"
-      ],
-      username: "openrelayproject",
-      credential: "openrelayproject"
+      urls: 'stun:stun.l.google.com:19302'
+    },
+    {
+      urls: 'turn:global.turn.twilio.com:3478?transport=udp',
+      username: import.meta.env.VITE_TWILIO_SID,
+      username: import.meta.env.VITE_TWILIO_TOKEN,
     }
-  ],
+  ]
 };
 
 function ChatPage({ userId }) {
