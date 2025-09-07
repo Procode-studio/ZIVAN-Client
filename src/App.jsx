@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
 import LoginPage from './pages/LoginPage.jsx';
 import ChatPage from './pages/ChatPage.jsx';
+import Root from './pages/Root.jsx';
 import './App.css';
 
 const getUserIdFromToken = () => {
@@ -28,6 +29,8 @@ function App() {
     <Router>
       <div className="App">
         <Routes>
+          <Route path="/" element={<Root />} />
+
           <Route path="/login" element={<LoginPage />} />
           <Route
             path="/chat"
@@ -37,7 +40,6 @@ function App() {
               </PrivateRoute>
             }
           />
-          <Route path="/" element={<Navigate to="/chat" />} />
         </Routes>
       </div>
     </Router>
