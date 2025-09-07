@@ -113,6 +113,11 @@ function ChatPage({ userId }) {
           connectionRef.current.signal(signal);
         }
       });
+      socket.on("iceCandidate", (candidate) => {
+        if (connectionRef.current) {
+          connectionRef.current.signal(candidate);
+        }
+      });
       socket.on("callEnded", leaveCall);
       socket.on('updateOnlineUsers', (users) => setOnlineUsers(new Set(users)));
     }
@@ -120,6 +125,7 @@ function ChatPage({ userId }) {
       if (socket) {
         socket.off("hey");
         socket.off("callAccepted");
+        socket.off("iceCandidate");
         socket.off("callEnded");
         socket.off('updateOnlineUsers');
       }
@@ -171,114 +177,63 @@ function ChatPage({ userId }) {
       return null;
     }
   };
+  
+  const createPeer = (initiator, currentStream) => {
+    const peer = new Peer({
+      initiator,
+      stream: currentStream,
+      config: peerConfig,
+    });
+
+    peer.on("stream", (stream) => setPeerStream(stream));
+    peer.on("close", leaveCall);
+    peer.on("error", (err) => {
+      console.error("Peer connection error:", err);
+      leaveCall();
+    });
+
+    return peer;
+  };
 
  const callUser = (idToCall) => {
-  navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(currentStream => {
-    setStream(currentStream);
-    setIsCalling(true);
+    navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(currentStream => {
+      setStream(currentStream);
+      setIsCalling(true);
 
-    const peer = new Peer({
-      initiator: true,
-      stream: currentStream,
-      config: peerConfig,
-    });
+      const peer = createPeer(true, currentStream);
+      connectionRef.current = peer;
 
-     peer.on("signal", (data) => {
-      if (data.type === 'offer') {
-        socket.emit("callUser", { userToCall: idToCall, signalData: data, from: userId });
-      } else if (data.candidate) {
-        socket.emit("iceCandidate", { to: idToCall, candidate: data });
-      }
-    });
+      peer.on("signal", (data) => {
+        if (data.type === 'offer') {
+          socket.emit("callUser", { userToCall: idToCall, signalData: data, from: userId });
+        } else if (data.candidate) {
+          socket.emit("iceCandidate", { to: idToCall, candidate: data });
+        }
+      });
+    }).catch(err => alert("Не удалось получить доступ к медиа."));
+  };
 
-    peer.on("stream", (stream) => setPeerStream(stream));
-	
-	peer.on("error", (err) => {
-	  console.error("Peer connection error:", err);
-	  leaveCall();
-	});
-	
-	console.log("Звонок начат. Peer создан.", peer);
-
-	peer.on("signal", (data) => {
-	  console.log("Сгенерирован сигнал для отправки (callUser)");
-	  socket.emit("callUser", { userToCall: idToCall, signalData: data, from: userId });
-	});
-
-	peer.on("stream", (stream) => {
-	  console.log("Получен медиа-поток от собеседника!");
-	  setPeerStream(stream);
-	});
-
-	peer.on("connect", () => {
-	  console.log("Peer-соединение установлено!");
-	});
-
-	peer.on("close", () => {
-	  console.log("Peer-соединение закрыто.");
-	  leaveCall();
-	});
-
-	peer.on("error", (err) => {
-	  console.error("Ошибка Peer-соединения:", err);
-	  leaveCall();
-	});
-
-    socket.on("callAccepted", (signal) => {
-      setIsCalling(false);
+  const answerCall = () => {
+    navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(currentStream => {
+      setStream(currentStream);
       setCallAccepted(true);
-      peer.signal(signal);
-    });
-	
-	socket.on("iceCandidate", (candidate) => {
-      peer.signal(candidate);
-    });
+      setReceivingCall(false);
 
-    connectionRef.current = peer;
-  }).catch(err => {
-    console.error("Failed to get media", err);
-    alert("Не удалось получить доступ к камере или микрофону.");
-  });
-};
+      const peer = createPeer(false, currentStream);
+      connectionRef.current = peer;
 
-const answerCall = () => {
-  navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(currentStream => {
-    setStream(currentStream);
-    setCallAccepted(true);
-    setReceivingCall(false);
+      peer.on("signal", (data) => {
+        if (data.type === 'answer') {
+          socket.emit("acceptCall", { signal: data, to: callerInfo.from });
+        } else if (data.candidate) {
+          socket.emit("iceCandidate", { to: callerInfo.from, candidate: data });
+        }
+      });
 
-    const peer = new Peer({
-      initiator: false,
-      stream: currentStream,
-      config: peerConfig,
-    });
+      peer.signal(callerInfo.signal);
+    }).catch(err => alert("Не удалось получить доступ к медиа."));
+  };
 
-    peer.on("signal", (data) => {
-      if (data.type === 'answer') {
-        socket.emit("acceptCall", { signal: data, to: callerInfo.from });
-      } else if (data.candidate) {
-        socket.emit("iceCandidate", { to: callerInfo.from, candidate: data });
-      }
-    });
-
-    peer.on("stream", (stream) => setPeerStream(stream));
-	
-	peer.on("error", (err) => {
-	  console.error("Peer connection error:", err);
-	  leaveCall();
-	});
-	
-	socket.on("iceCandidate", (candidate) => {
-      peer.signal(candidate);
-    });
-
-    peer.signal(callerInfo.signal);
-    connectionRef.current = peer;
-  }).catch(err => {
-    console.error("Failed to get media", err);
-    alert("Не удалось получить доступ к камере или микрофону.");
-  });
-};
 
   const otherUser = selectedChat?.members.find(m => m.id !== userId);
   const isOtherUserOnline = otherUser ? onlineUsers.has(otherUser.id) : false;
