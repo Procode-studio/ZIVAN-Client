@@ -44,6 +44,8 @@ function ChatPage({ userId }) {
   const connectionRef = useRef();
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+  
+  const peerAudioRef = useRef();
 
   const handleNewMessage = useCallback((message) => {
     if (selectedChat && message.chat_id === selectedChat.id) {
@@ -125,6 +127,12 @@ function ChatPage({ userId }) {
 
   useEffect(() => { getChats().then(setChats); }, []);
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+  
+  useEffect(() => {
+    if (peerStream && peerAudioRef.current) {
+      peerAudioRef.current.srcObject = peerStream;
+    }
+  }, [peerStream]);
 
   const handleSelectChat = async (chat) => {
     setSelectedChat(chat);
@@ -180,9 +188,7 @@ function ChatPage({ userId }) {
       socket.emit("callUser", { userToCall: idToCall, signalData: data, from: userId });
     });
 
-    peer.on("stream", (peerStream) => {
-      setPeerStream(peerStream);
-    });
+    peer.on("stream", (stream) => setPeerStream(stream));
 
     socket.on("callAccepted", (signal) => {
       setIsCalling(false);
@@ -214,9 +220,7 @@ const answerCall = () => {
       socket.emit("acceptCall", { signal: data, to: callerInfo.from });
     });
 
-    peer.on("stream", (peerStream) => {
-      setPeerStream(peerStream);
-    });
+    peer.on("stream", (stream) => setPeerStream(stream));
 
     peer.signal(callerInfo.signal);
     connectionRef.current = peer;
@@ -232,16 +236,16 @@ const answerCall = () => {
 
   return (
     <div>
-      {callAccepted && !isCallMinimized && (
+      {callAccepted && (
         <CallUI 
-        stream={stream} 
-        peerStream={peerStream} 
-        onLeaveCall={leaveCall} 
-        peerName={otherUser?.username || callerInfo.fromName}
-        onMinimize={() => setIsCallMinimized(true)}
-        isCalling={isCalling}
-        isMinimized={isCallMinimized}
-      />
+          stream={stream} 
+          peerStream={peerStream} 
+          onLeaveCall={leaveCall} 
+          peerName={otherUser?.username || callerInfo.fromName}
+          onMinimize={() => setIsCallMinimized(true)}
+          isCalling={isCalling}
+          isMinimized={isCallMinimized}
+        />
       )}
       
       <h1>ZIVAN <button onClick={() => { localStorage.removeItem('token'); window.location.href = '/login'; }}>Выйти</button></h1>
