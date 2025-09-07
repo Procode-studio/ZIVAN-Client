@@ -43,7 +43,8 @@ function ChatPage({ userId }) {
     }
   }, [selectedChat]);
 
-  const { joinRoom, sendMessage, socket } = useSocket(handleNewMessage);
+  const apiUrl = import.meta.env.VITE_API_URL;
+  const { joinRoom, sendMessage, socket } = useSocket(apiUrl, handleNewMessage);
 
   useEffect(() => {
     if (socket) {

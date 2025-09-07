@@ -1,18 +1,20 @@
 import { useEffect, useRef, useCallback } from 'react';
 import io from 'socket.io-client';
 
-export const useSocket = (onNewMessage, onUserTyping, onUserStoppedTyping) => {
+// --- ИЗМЕНЕНИЕ: Добавляем 'url' как первый аргумент ---
+export const useSocket = (url, onNewMessage) => { 
   const socketRef = useRef(null);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
-    if (!token) return;
+    if (!token || !url) return; // <-- Добавляем проверку на url
 
-    socketRef.current = io(process.env.VITE_API_URL, {
+    // --- ИЗМЕНЕНИЕ: Используем 'url' вместо import.meta.env ---
+    socketRef.current = io(url, {
       auth: {
         token: token,
       },
-	   transports: ['websocket', 'polling'],
+      transports: ['websocket', 'polling'],
     });
 
     const socket = socketRef.current;
@@ -30,25 +32,14 @@ export const useSocket = (onNewMessage, onUserTyping, onUserStoppedTyping) => {
         onNewMessage(message);
       }
     });
-
-    socket.on('userTyping', (data) => {
-      if (onUserTyping) {
-        onUserTyping(data);
-      }
-    });
-
-    socket.on('userStoppedTyping', (data) => {
-      if (onUserStoppedTyping) {
-        onUserStoppedTyping(data);
-      }
-    });
-
+    
     return () => {
       if (socket) {
         socket.disconnect();
       }
     };
-  }, [onNewMessage, onUserTyping, onUserStoppedTyping]);
+  // --- ИЗМЕНЕНИЕ: Добавляем 'url' в массив зависимостей ---
+  }, [url, onNewMessage]); 
 
   const joinRoom = useCallback((chatId) => {
     socketRef.current?.emit('joinRoom', chatId);
@@ -58,13 +49,5 @@ export const useSocket = (onNewMessage, onUserTyping, onUserStoppedTyping) => {
     socketRef.current?.emit('sendMessage', messageData);
   }, []);
 
-  const startTyping = useCallback((chatId) => {
-    socketRef.current?.emit('startTyping', { chatId });
-  }, []);
-
-  const stopTyping = useCallback((chatId) => {
-    socketRef.current?.emit('stopTyping', { chatId });
-  }, []);
-
-  return { joinRoom, sendMessage, startTyping, stopTyping, socket: socketRef.current };
+  return { joinRoom, sendMessage, socket: socketRef.current };
 };
