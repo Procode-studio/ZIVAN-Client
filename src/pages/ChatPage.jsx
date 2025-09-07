@@ -129,13 +129,14 @@ const leaveCall = () => {
   setReceivingCall(false);
 };
 
-  const otherUser = selectedChat?.members.find(m => m.id !== userId);
+   const otherUser = selectedChat?.members.find(m => m.id !== userId);
 
   return (
     <div>
       {callAccepted && (
-        <CallWindow stream={stream} myVideoRef={myVideo} userVideoRef={userVideo} onLeaveCall={leaveCall} />
+        <CallUI stream={stream} peerStream={peerStream} onLeaveCall={leaveCall} peerName={otherUser?.username || callerInfo.fromName} />
       )}
+      
       <h1>ZIVAN <button onClick={() => { localStorage.removeItem('token'); window.location.href = '/login'; }}>Выйти</button></h1>
       <button onClick={() => setIsModalOpen(true)}>+ Новый чат</button>
       {isModalOpen && <CreateChatModal onClose={() => setIsModalOpen(false)} onChatCreated={() => getChats().then(setChats)} />}
@@ -153,8 +154,8 @@ const leaveCall = () => {
             <>
               <div className="chat-header">
                 <h2>{selectedChat.name || `Чат #${selectedChat.id}`}</h2>
-                {selectedChat.type === 'private' && otherUserId && !isCalling && !callAccepted && !receivingCall && (
-                  <button onClick={() => callUser(otherUserId)}>📞 Позвонить</button>
+                {selectedChat.type === 'private' && otherUser && !isCalling && !callAccepted && !receivingCall && (
+                  <button onClick={() => callUser(otherUser.id)}>📞 Позвонить</button>
                 )}
                 {isCalling && <p><i>Вызов...</i></p>}
               </div>
