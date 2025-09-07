@@ -2,9 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import Avatar from './Avatar.jsx';
 import './CallUI.css';
 
-function CallUI({ stream, peerStream, onLeaveCall, peerName, onMinimize, isCalling }) {
+function CallUI({ stream, peerStream, onLeaveCall, peerName, onMinimize, isCalling, isMinimized }) {
   const [isMicOn, setIsMicOn] = useState(true);
-  const [isCameraOn, setIsCameraOn] = useState(true); // Камера теперь включена по умолчанию
+  const [isCameraOn, setIsCameraOn] = useState(true);
   const myVideo = useRef();
   const userVideo = useRef();
 
@@ -43,7 +43,7 @@ function CallUI({ stream, peerStream, onLeaveCall, peerName, onMinimize, isCalli
   };
 
   return (
-    <div className="call-overlay">
+    <div className={`call-overlay ${isMinimized ? 'minimized' : ''}`}>
       <div className="call-info">
         <h2>{peerName}</h2>
         <p>{isCalling ? 'Вызов...' : formatDuration(callDuration)}</p>

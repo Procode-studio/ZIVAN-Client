@@ -234,13 +234,14 @@ const answerCall = () => {
     <div>
       {callAccepted && !isCallMinimized && (
         <CallUI 
-          stream={stream} 
-          peerStream={peerStream} 
-          onLeaveCall={leaveCall} 
-          peerName={otherUser?.username || callerInfo.fromName}
-          onMinimize={() => setIsCallMinimized(true)}
-          isCalling={isCalling}
-        />
+        stream={stream} 
+        peerStream={peerStream} 
+        onLeaveCall={leaveCall} 
+        peerName={otherUser?.username || callerInfo.fromName}
+        onMinimize={() => setIsCallMinimized(true)}
+        isCalling={isCalling}
+        isMinimized={isCallMinimized}
+      />
       )}
       
       <h1>ZIVAN <button onClick={() => { localStorage.removeItem('token'); window.location.href = '/login'; }}>Выйти</button></h1>
