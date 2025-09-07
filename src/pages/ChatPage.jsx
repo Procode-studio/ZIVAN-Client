@@ -164,35 +164,67 @@ function ChatPage({ userId }) {
     }
   };
 
-  const callUser = async (idToCall) => {
-    const currentStream = await startStream(false);
-    if (!currentStream) return;
+ const callUser = (idToCall) => {
+  navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(currentStream => {
+    setStream(currentStream);
     setIsCalling(true);
-    
-    const peer = new Peer({ initiator: true, trickle: false, stream: currentStream, config: peerConfig });
+
+    const peer = new Peer({
+      initiator: true,
+      trickle: false,
+      stream: currentStream,
+      config: peerConfig,
+    });
+
+    peer.on("signal", (data) => {
+      socket.emit("callUser", { userToCall: idToCall, signalData: data, from: userId });
+    });
+
+    peer.on("stream", (peerStream) => {
+      setPeerStream(peerStream);
+    });
+
+    socket.on("callAccepted", (signal) => {
+      setIsCalling(false);
+      setCallAccepted(true);
+      peer.signal(signal);
+    });
+
     connectionRef.current = peer;
+  }).catch(err => {
+    console.error("Failed to get media", err);
+    alert("Не удалось получить доступ к камере или микрофону.");
+  });
+};
 
-    peer.on("signal", (data) => socket.emit("callUser", { userToCall: idToCall, signalData: data, from: userId }));
-    peer.on("stream", setPeerStream);
-    peer.on("close", leaveCall);
-    peer.on("error", leaveCall);
-  };
-
-  const answerCall = async () => {
-    setReceivingCall(false);
-    const currentStream = await startStream(false);
-    if (!currentStream) return;
+const answerCall = () => {
+  navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(currentStream => {
+    setStream(currentStream);
     setCallAccepted(true);
+    setReceivingCall(false);
 
-    const peer = new Peer({ initiator: false, trickle: false, stream: currentStream, config: peerConfig });
-    connectionRef.current = peer;
+    const peer = new Peer({
+      initiator: false,
+      trickle: false,
+      stream: currentStream,
+      config: peerConfig,
+    });
 
-    peer.on("signal", (data) => socket.emit("acceptCall", { signal: data, to: callerInfo.from }));
-    peer.on("stream", setPeerStream);
-    peer.on("close", leaveCall);
-    peer.on("error", leaveCall);
+    peer.on("signal", (data) => {
+      socket.emit("acceptCall", { signal: data, to: callerInfo.from });
+    });
+
+    peer.on("stream", (peerStream) => {
+      setPeerStream(peerStream);
+    });
+
     peer.signal(callerInfo.signal);
-  };
+    connectionRef.current = peer;
+  }).catch(err => {
+    console.error("Failed to get media", err);
+    alert("Не удалось получить доступ к камере или микрофону.");
+  });
+};
 
   const otherUser = selectedChat?.members.find(m => m.id !== userId);
   const isOtherUserOnline = otherUser ? onlineUsers.has(otherUser.id) : false;
