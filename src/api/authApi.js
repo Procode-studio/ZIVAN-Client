@@ -1,11 +1,11 @@
-import apiClient from './index';
+import { post } from './index';
 
 export const login = async (username, password) => {
-  const response = await apiClient.post('/api/auth/login', { username, password });
-  return response.data; // Возвращаем ответ от сервера, например { token: "..." }
+  const response = await post('/api/auth/login', { username, password });
+  return response.data;
 };
 
 export const register = async (username, password) => {
-  const response = await apiClient.post('/api/auth/register', { username, password });
+  const response = await post('/api/auth/register', { username, password });
   return response.data;
 };

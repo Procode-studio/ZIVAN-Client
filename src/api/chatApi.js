@@ -1,21 +1,19 @@
-import apiClient from './index';
+import { get, post } from './index';
 
-// Функция для получения списка чатов пользователя
 export const getChats = async () => {
-  const response = await apiClient.get('/api/chats');
-  return response.data; // Возвращаем массив чатов
+  const response = await get('/api/chats'); 
+  return response.data;
 };
 
-// Функция для получения истории сообщений для конкретного чата
 export const getMessages = async (chatId) => {
-  const response = await apiClient.get(`/api/messages/${chatId}`);
-  return response.data; // Возвращаем массив сообщений
+  const response = await get(`/api/messages/${chatId}`);
+  return response.data; 
 };
 
 export const createChat = async (name, memberIds) => {
-  const response = await apiClient.post('/api/chats', {
+  const response = await post('/api/chats', {
     name: name,
-    type: memberIds.length > 1 ? 'group' : 'private', // Автоматически определяем тип
+    type: memberIds.length > 1 ? 'group' : 'private',
     memberIds: memberIds,
   });
   return response.data;
