@@ -4,11 +4,10 @@ import { getChats, getMessages } from '../api/chatApi';
 import { useSocket } from '../hooks/useSocket';
 import CreateChatModal from '../components/CreateChatModal.jsx';
 import CallUI from '../components/CallUI.jsx';
-import './ChatPage.css';
-import MinimizedCallView from '../components/MinimizedCallView.jsx'; // <-- ИМПОРТ
+import MinimizedCallView from '../components/MinimizedCallView.jsx';
 import Avatar from '../components/Avatar.jsx';
+import './ChatPage.css';
 
-// Конфигурация STUN/TURN серверов для обхода сетевых ограничений
 const peerConfig = {
   iceServers: [
     {
@@ -25,14 +24,12 @@ const peerConfig = {
 };
 
 function ChatPage({ userId }) {
-  // Состояния для чатов и сообщений
   const [chats, setChats] = useState([]);
   const [selectedChat, setSelectedChat] = useState(null);
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   
-  // Состояния для звонков
   const [stream, setStream] = useState(null);
   const [peerStream, setPeerStream] = useState(null);
   const [receivingCall, setReceivingCall] = useState(false);
@@ -40,84 +37,91 @@ function ChatPage({ userId }) {
   const [callAccepted, setCallAccepted] = useState(false);
   const [isCalling, setIsCalling] = useState(false);
   const [isCallMinimized, setIsCallMinimized] = useState(false);
-  
+
   const [onlineUsers, setOnlineUsers] = useState(new Set());
   const [typingUsers, setTypingUsers] = useState({});
   
-  const typingTimeoutRef = useRef(null);
-
   const connectionRef = useRef();
   const messagesEndRef = useRef(null);
+  const typingTimeoutRef = useRef(null);
 
   const handleNewMessage = useCallback((message) => {
     if (selectedChat && message.chat_id === selectedChat.id) {
-      setMessages((prevMessages) => [...prevMessages, message]);
+      setMessages((prev) => [...prev, message]);
     }
   }, [selectedChat]);
-  
-  const handleUserTyping = useCallback(({ userId, chatId }) => {
-	  if (selectedChat?.id === chatId) {
-		setTypingUsers(prev => ({ ...prev, [userId]: true }));
-	  }
-	}, [selectedChat]);
 
-	const handleUserStoppedTyping = useCallback(({ userId, chatId }) => {
-	  if (selectedChat?.id === chatId) {
-		setTypingUsers(prev => {
-		  const newTypingUsers = { ...prev };
-		  delete newTypingUsers[userId];
-		  return newTypingUsers;
-		});
-	  }
-	}, [selectedChat]);
-	
-	const handleTyping = (e) => {
-	  setNewMessage(e.target.value);
-	  if (typingTimeoutRef.current) {
-		clearTimeout(typingTimeoutRef.current);
-	  } else {
-		startTyping(selectedChat.id);
-	  }
-	  typingTimeoutRef.current = setTimeout(() => {
-		stopTyping(selectedChat.id);
-		typingTimeoutRef.current = null;
-	  }, 2000);
-	};
+  const handleUserTyping = useCallback(({ userId, chatId }) => {
+    if (selectedChat?.id === chatId) {
+      setTypingUsers(prev => ({ ...prev, [userId]: true }));
+    }
+  }, [selectedChat]);
+
+  const handleUserStoppedTyping = useCallback(({ userId, chatId }) => {
+    if (selectedChat?.id === chatId) {
+      setTypingUsers(prev => {
+        const newTypingUsers = { ...prev };
+        delete newTypingUsers[userId];
+        return newTypingUsers;
+      });
+    }
+  }, [selectedChat]);
 
   const { joinRoom, sendMessage, startTyping, stopTyping, socket } = useSocket(
-	  import.meta.env.VITE_API_URL,
-	  handleNewMessage,
-	  handleUserTyping, 
-	  handleUserStoppedTyping 
-	);
+    import.meta.env.VITE_API_URL,
+    handleNewMessage,
+    handleUserTyping,
+    handleUserStoppedTyping
+  );
+
+  const leaveCall = useCallback(() => {
+    if (connectionRef.current) {
+      const otherUserInCall = selectedChat?.members.find(m => m.id !== userId) || { id: callerInfo.from };
+      if (otherUserInCall.id) {
+        socket.emit("endCall", { to: otherUserInCall.id });
+      }
+      connectionRef.current.destroy();
+    }
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+    }
+    setStream(null);
+    setPeerStream(null);
+    setCallAccepted(false);
+    setIsCalling(false);
+    setReceivingCall(false);
+    setIsCallMinimized(false);
+    setCallerInfo({ from: null, signal: null, fromName: '' });
+    connectionRef.current = null;
+  }, [socket, stream, selectedChat, userId, callerInfo.from]);
 
   useEffect(() => {
-	  if (socket) {
-		socket.on("hey", (data) => {
-		  const chatWithCaller = chats.find(chat => chat.members.some(m => m.id === data.from));
-		  const callerName = chatWithCaller?.members.find(m => m.id === data.from)?.username || 'Unknown';
-		  setCallerInfo({ from: data.from, signal: data.signal, fromName: callerName });
-		  setReceivingCall(true);
-		});
-		socket.on("callAccepted", (signal) => {
-		  setIsCalling(false);
-		  setCallAccepted(true);
-		  if (connectionRef.current) {
-			connectionRef.current.signal(signal);
-		  }
-		});
-		socket.on("callEnded", leaveCall);
-		socket.on('updateOnlineUsers', (users) => setOnlineUsers(new Set(users)));
-	  }
-	  return () => {
-		if (socket) {
-		  socket.off("hey");
-		  socket.off("callAccepted");
-		  socket.off("callEnded");
-		  socket.off('updateOnlineUsers');
-		}
-	  };
-	}, [socket, chats]);
+    if (socket) {
+      socket.on("hey", (data) => {
+        const chatWithCaller = chats.find(chat => chat.members.some(m => m.id === data.from));
+        const callerName = chatWithCaller?.members.find(m => m.id === data.from)?.username || 'Unknown';
+        setCallerInfo({ from: data.from, signal: data.signal, fromName: callerName });
+        setReceivingCall(true);
+      });
+      socket.on("callAccepted", (signal) => {
+        setIsCalling(false);
+        setCallAccepted(true);
+        if (connectionRef.current) {
+          connectionRef.current.signal(signal);
+        }
+      });
+      socket.on("callEnded", leaveCall);
+      socket.on('updateOnlineUsers', (users) => setOnlineUsers(new Set(users)));
+    }
+    return () => {
+      if (socket) {
+        socket.off("hey");
+        socket.off("callAccepted");
+        socket.off("callEnded");
+        socket.off('updateOnlineUsers');
+      }
+    };
+  }, [socket, chats, leaveCall]);
 
   useEffect(() => { getChats().then(setChats); }, []);
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
@@ -138,19 +142,22 @@ function ChatPage({ userId }) {
     }
   };
 
-  const startStreamAndInitPeer = async (initiator) => {
-    try {
-      const currentStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      setStream(currentStream);
+  const handleTyping = (e) => {
+    setNewMessage(e.target.value);
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    else startTyping(selectedChat.id);
+    typingTimeoutRef.current = setTimeout(() => {
+      stopTyping(selectedChat.id);
+      typingTimeoutRef.current = null;
+    }, 2000);
+  };
 
-      const peer = new Peer({ 
-        initiator, 
-        trickle: false, 
-        stream: currentStream,
-        config: peerConfig 
-      });
-      connectionRef.current = peer;
-      return peer;
+  // --- ВОССТАНОВЛЕННАЯ ФУНКЦИЯ ---
+  const startStream = async (cameraOn = false) => {
+    try {
+      const currentStream = await navigator.mediaDevices.getUserMedia({ video: cameraOn, audio: true });
+      setStream(currentStream);
+      return currentStream;
     } catch (err) {
       alert("Не удалось получить доступ к микрофону/камере.");
       return null;
@@ -166,7 +173,7 @@ function ChatPage({ userId }) {
     connectionRef.current = peer;
 
     peer.on("signal", (data) => socket.emit("callUser", { userToCall: idToCall, signalData: data, from: userId }));
-    peer.on("stream", (stream) => setPeerStream(stream));
+    peer.on("stream", setPeerStream);
     peer.on("close", leaveCall);
     peer.on("error", leaveCall);
   };
@@ -181,33 +188,11 @@ function ChatPage({ userId }) {
     connectionRef.current = peer;
 
     peer.on("signal", (data) => socket.emit("acceptCall", { signal: data, to: callerInfo.from }));
-    peer.on("stream", (stream) => setPeerStream(stream));
+    peer.on("stream", setPeerStream);
     peer.on("close", leaveCall);
     peer.on("error", leaveCall);
     peer.signal(callerInfo.signal);
   };
-
-const leaveCall = () => {
-  if (connectionRef.current) {
-    const otherUserInCall = selectedChat?.members.find(m => m.id !== userId) || { id: callerInfo.from };
-    if (otherUserInCall.id) {
-      socket.emit("endCall", { to: otherUserInCall.id });
-    }
-    connectionRef.current.destroy();
-  }
-  if (stream) {
-    stream.getTracks().forEach(track => track.stop());
-  }
-  
-  setStream(null);
-  setPeerStream(null);
-  setCallAccepted(false);
-  setIsCalling(false);
-  setReceivingCall(false);
-  setIsCallMinimized(false);
-  setCallerInfo({ from: null, signal: null, fromName: '' });
-  connectionRef.current = null;
-};
 
   const otherUser = selectedChat?.members.find(m => m.id !== userId);
   const isOtherUserOnline = otherUser ? onlineUsers.has(otherUser.id) : false;
