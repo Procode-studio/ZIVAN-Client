@@ -12,6 +12,7 @@ const peerConfig = {
   iceServers: [
     {
       urls: [
+		"stun:stun.l.google.com:19302",
         "stun:stun.openrelay.metered.ca:80",
         "turn:openrelay.metered.ca:80",
         "turn:openrelay.metered.ca:443",
@@ -21,9 +22,6 @@ const peerConfig = {
       credential: "openrelayproject"
     }
   ],
-  sdpSemantics: 'unified-plan',
-  iceTransportPolicy: 'relay',
-  bundlePolicy: 'max-bundle'
 };
 
 function ChatPage({ userId }) {
@@ -194,6 +192,32 @@ function ChatPage({ userId }) {
 	
 	peer.on("error", (err) => {
 	  console.error("Peer connection error:", err);
+	  leaveCall();
+	});
+	
+	console.log("Звонок начат. Peer создан.", peer);
+
+	peer.on("signal", (data) => {
+	  console.log("Сгенерирован сигнал для отправки (callUser)");
+	  socket.emit("callUser", { userToCall: idToCall, signalData: data, from: userId });
+	});
+
+	peer.on("stream", (stream) => {
+	  console.log("Получен медиа-поток от собеседника!");
+	  setPeerStream(stream);
+	});
+
+	peer.on("connect", () => {
+	  console.log("Peer-соединение установлено!");
+	});
+
+	peer.on("close", () => {
+	  console.log("Peer-соединение закрыто.");
+	  leaveCall();
+	});
+
+	peer.on("error", (err) => {
+	  console.error("Ошибка Peer-соединения:", err);
 	  leaveCall();
 	});
 
