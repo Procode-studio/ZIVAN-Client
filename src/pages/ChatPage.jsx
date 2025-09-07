@@ -6,31 +6,20 @@ import CreateChatModal from '../components/CreateChatModal.jsx';
 import CallWindow from '../components/CallWindow.jsx';
 import './ChatPage.css';
 
-const peerConfig = {
-  iceServers: [
-    {
-      urls: [
-        "stun:stun.openrelay.metered.ca:80",
-        "turn:openrelay.metered.ca:80",
-        "turn:openrelay.metered.ca:443",
-        "turn:openrelay.metered.ca:443?transport=tcp"
-      ],
-      username: "openrelayproject",
-      credential: "openrelayproject"
-    }
-  ]
-};
-
 function ChatPage({ userId }) {
+  // Состояния чата
   const [chats, setChats] = useState([]);
   const [selectedChat, setSelectedChat] = useState(null);
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  
+  // Состояния звонка
   const [stream, setStream] = useState(null);
   const [receivingCall, setReceivingCall] = useState(false);
   const [callerInfo, setCallerInfo] = useState({ from: null, signal: null });
   const [callAccepted, setCallAccepted] = useState(false);
+  const [isCalling, setIsCalling] = useState(false); // <-- НОВОЕ: для отображения "Вызов..."
   
   const myVideo = useRef();
   const userVideo = useRef();
@@ -53,6 +42,7 @@ function ChatPage({ userId }) {
         setCallerInfo({ from: data.from, signal: data.signal });
       });
       socket.on("callAccepted", (signal) => {
+        setIsCalling(false); // <-- Убираем "Вызов...", так как пришел ответ
         setCallAccepted(true);
         if (connectionRef.current) {
           connectionRef.current.signal(signal);
@@ -91,21 +81,19 @@ function ChatPage({ userId }) {
       setStream(currentStream);
       return currentStream;
     } catch (err) {
-      console.error("Ошибка доступа к камере:", err);
+      // --- УЛУЧШЕНИЕ: Обработка ошибки ---
+      console.error("Ошибка доступа к камере/микрофону:", err);
+      alert("Не удалось получить доступ к камере или микрофону. Проверьте разрешения в браузере.");
       return null;
     }
   };
 
   const callUser = async (idToCall) => {
     const currentStream = await startStream();
-    if (!currentStream) return;
+    if (!currentStream) return; // Если пользователь не дал доступ, выходим
 
-    const peer = new Peer({ 
-      initiator: true, 
-      trickle: false, 
-      stream: currentStream,
-      config: peerConfig 
-    });
+    setIsCalling(true); // <-- НОВОЕ: Показываем "Вызов..."
+    const peer = new Peer({ initiator: true, trickle: false, stream: currentStream });
     connectionRef.current = peer;
 
     peer.on("signal", (data) => {
@@ -117,18 +105,12 @@ function ChatPage({ userId }) {
   };
 
   const answerCall = async () => {
-    setCallAccepted(true);
-    setReceivingCall(false);
-
     const currentStream = await startStream();
     if (!currentStream) return;
 
-    const peer = new Peer({ 
-      initiator: false, 
-      trickle: false, 
-      stream: currentStream,
-      config: peerConfig
-    });
+    setCallAccepted(true);
+    setReceivingCall(false);
+    const peer = new Peer({ initiator: false, trickle: false, stream: currentStream });
     connectionRef.current = peer;
 
     peer.on("signal", (data) => {
@@ -144,6 +126,7 @@ function ChatPage({ userId }) {
   const leaveCall = () => {
     setCallAccepted(false);
     setReceivingCall(false);
+    setIsCalling(false); // <-- Сбрасываем состояние "Вызов..."
     if (connectionRef.current) connectionRef.current.destroy();
     if (stream) stream.getTracks().forEach(track => track.stop());
     setStream(null);
@@ -154,16 +137,12 @@ function ChatPage({ userId }) {
   return (
     <div>
       {callAccepted && (
-        <CallWindow
-          stream={stream}
-          myVideoRef={myVideo}
-          userVideoRef={userVideo}
-          onLeaveCall={leaveCall}
-        />
+        <CallWindow stream={stream} myVideoRef={myVideo} userVideoRef={userVideo} onLeaveCall={leaveCall} />
       )}
       <h1>ZIVAN <button onClick={() => { localStorage.removeItem('token'); window.location.href = '/login'; }}>Выйти</button></h1>
       <button onClick={() => setIsModalOpen(true)}>+ Новый чат</button>
       {isModalOpen && <CreateChatModal onClose={() => setIsModalOpen(false)} onChatCreated={() => getChats().then(setChats)} />}
+      
       <div className="chat-container">
         <div className="chat-list">
           {chats.map(chat => (
@@ -177,9 +156,11 @@ function ChatPage({ userId }) {
             <>
               <div className="chat-header">
                 <h2>{selectedChat.name || `Чат #${selectedChat.id}`}</h2>
-                {selectedChat.type === 'private' && otherUserId && !callAccepted && !receivingCall && (
+                {/* --- УЛУЧШЕНИЕ: Логика отображения кнопок --- */}
+                {selectedChat.type === 'private' && otherUserId && !isCalling && !callAccepted && !receivingCall && (
                   <button onClick={() => callUser(otherUserId)}>📞 Позвонить</button>
                 )}
+                {isCalling && <p><i>Вызов...</i></p>}
               </div>
               <div className="messages-list">
                 {messages.map(msg => {
@@ -202,6 +183,7 @@ function ChatPage({ userId }) {
           )}
         </div>
       </div>
+
       {receivingCall && !callAccepted && (
         <div className="caller-notification">
           <h1>Вам звонит пользователь {callerInfo.from}</h1>
