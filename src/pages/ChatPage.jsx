@@ -110,19 +110,24 @@ function ChatPage({ userId }) {
     peer.signal(callerInfo.signal);
   };
 
-  const leaveCall = () => {
-    if (connectionRef.current) {
-      const otherUserId = selectedChat?.members.find(m => m.id !== userId)?.id || callerInfo.from;
-      if (otherUserId) socket.emit("endCall", { to: otherUserId });
-      connectionRef.current.destroy();
+const leaveCall = () => {
+  if (connectionRef.current) {
+    const otherUserInCall = selectedChat?.members.find(m => m.id !== userId) || { id: callerInfo.from };
+    if (otherUserInCall.id) {
+      socket.emit("endCall", { to: otherUserInCall.id });
     }
-    if (stream) stream.getTracks().forEach(track => track.stop());
-    setStream(null);
-    setPeerStream(null);
-    setCallAccepted(false);
-    setIsCalling(false);
-    setReceivingCall(false);
-  };
+    connectionRef.current.destroy();
+  }
+
+  if (stream) {
+    stream.getTracks().forEach(track => track.stop());
+  }
+  setStream(null);
+  setPeerStream(null);
+  setCallAccepted(false);
+  setIsCalling(false);
+  setReceivingCall(false);
+};
 
   const otherUser = selectedChat?.members.find(m => m.id !== userId);
 
