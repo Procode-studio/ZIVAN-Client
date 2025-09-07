@@ -4,20 +4,25 @@ import './CallUI.css';
 
 function CallUI({ stream, peerStream, onLeaveCall, peerName, onMinimize, isCalling }) {
   const [isMicOn, setIsMicOn] = useState(true);
-  const [isCameraOn, setIsCameraOn] = useState(false);
+  const [isCameraOn, setIsCameraOn] = useState(false); // Камера по умолчанию выключена
   const [callDuration, setCallDuration] = useState(0);
   const myVideo = useRef();
-  const userVideo = useRef(); // <-- Добавляем ref для видео собеседника
+  const userVideo = useRef();
 
+  // --- ГЛАВНОЕ ИСПРАВЛЕНИЕ ЗДЕСЬ ---
   useEffect(() => {
     if (stream && myVideo.current) {
+      // Привязываем поток к видео-элементу
       myVideo.current.srcObject = stream;
-      // Применяем начальное состояние камеры
-      stream.getVideoTracks().forEach(track => track.enabled = isCameraOn);
+      
+      // Убеждаемся, что состояние дорожки соответствует состоянию компонента
+      stream.getVideoTracks().forEach(track => {
+        track.enabled = isCameraOn;
+      });
     }
+  // Этот эффект теперь будет срабатывать каждый раз, когда меняется isCameraOn
   }, [stream, isCameraOn]);
 
-  // --- НОВЫЙ useEffect для peerStream ---
   useEffect(() => {
     if (peerStream && userVideo.current) {
       userVideo.current.srcObject = peerStream;
@@ -35,16 +40,16 @@ function CallUI({ stream, peerStream, onLeaveCall, peerName, onMinimize, isCalli
 
   const toggleMic = () => {
     if (stream) {
-      stream.getAudioTracks().forEach(track => track.enabled = !track.enabled);
+      stream.getAudioTracks().forEach(track => {
+        track.enabled = !track.enabled;
+      });
       setIsMicOn(prev => !prev);
     }
   };
 
   const toggleCamera = () => {
-    if (stream) {
-      stream.getVideoTracks().forEach(track => track.enabled = !track.enabled);
-      setIsCameraOn(prev => !prev);
-    }
+    // Просто меняем состояние. useEffect сделает все остальное.
+    setIsCameraOn(prev => !prev);
   };
 
   return (
@@ -64,9 +69,16 @@ function CallUI({ stream, peerStream, onLeaveCall, peerName, onMinimize, isCalli
         )}
         
         <div className="my-video-container">
-          {stream && isCameraOn ? (
-            <video className="my-video" playsInline muted ref={myVideo} autoPlay />
-          ) : (
+          {/* Теперь этот блок правильно отображает видео или аватар */}
+          <video 
+            className="my-video" 
+            style={{ display: isCameraOn ? 'block' : 'none' }} 
+            playsInline 
+            muted 
+            ref={myVideo} 
+            autoPlay 
+          />
+          {!isCameraOn && (
             <div className="my-video">
               <Avatar username="You" size={100} />
             </div>
