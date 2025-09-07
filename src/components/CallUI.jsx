@@ -2,9 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import Avatar from './Avatar.jsx';
 import './CallUI.css';
 
-function CallUI({ stream, peerStream, onLeaveCall, peerName, onMinimize }) {
+function CallUI({ stream, peerStream, onLeaveCall, peerName, onMinimize, isCalling }) {
   const [isMicOn, setIsMicOn] = useState(true);
-  const [isCameraOn, setIsCameraOn] = useState(false); // Камера по умолчанию выключена
+  const [isCameraOn, setIsCameraOn] = useState(false);
   const [callDuration, setCallDuration] = useState(0);
   const myVideo = useRef();
 

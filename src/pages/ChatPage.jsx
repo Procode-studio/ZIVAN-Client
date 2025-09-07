@@ -273,7 +273,7 @@ const leaveCall = () => {
                   type="text" 
                   placeholder="Введите сообщение..." 
                   value={newMessage} 
-                  onChange={handleTyping} // <-- ИЗМЕНЕНИЕ ЗДЕСЬ
+                  onChange={handleTyping}
                 />
                 <button type="submit">Отправить</button>
               </form>
