@@ -2,8 +2,8 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Peer from 'simple-peer';
 import { getChats, getMessages } from '../api/chatApi';
 import { useSocket } from '../hooks/useSocket';
-import CreateChatModal from '../components/CreateChatModal';
-import CallWindow from '../components/CallWindow';
+import CreateChatModal from '../components/CreateChatModal.jsx';
+import CallWindow from '../components/CallWindow.jsx';
 import './ChatPage.css';
 
 const peerConfig = {

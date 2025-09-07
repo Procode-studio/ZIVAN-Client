@@ -8,7 +8,7 @@ export const useSocket = (onNewMessage, onUserTyping, onUserStoppedTyping) => {
     const token = localStorage.getItem('token');
     if (!token) return;
 
-    socketRef.current = io(process.env.REACT_APP_API_URL, {
+    socketRef.current = io(process.env.VITE_API_URL, {
       auth: {
         token: token,
       },
