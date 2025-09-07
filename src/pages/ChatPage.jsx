@@ -20,7 +20,10 @@ const peerConfig = {
       username: "openrelayproject",
       credential: "openrelayproject"
     }
-  ]
+  ],
+  sdpSemantics: 'unified-plan',
+  iceTransportPolicy: 'relay',
+  bundlePolicy: 'max-bundle'
 };
 
 function ChatPage({ userId }) {
@@ -160,7 +163,6 @@ function ChatPage({ userId }) {
     }, 2000);
   };
 
-  // --- ВОССТАНОВЛЕННАЯ ФУНКЦИЯ ---
   const startStream = async (cameraOn = false) => {
     try {
       const currentStream = await navigator.mediaDevices.getUserMedia({ video: cameraOn, audio: true });
@@ -189,6 +191,11 @@ function ChatPage({ userId }) {
     });
 
     peer.on("stream", (stream) => setPeerStream(stream));
+	
+	peer.on("error", (err) => {
+	  console.error("Peer connection error:", err);
+	  leaveCall();
+	});
 
     socket.on("callAccepted", (signal) => {
       setIsCalling(false);
@@ -221,6 +228,11 @@ const answerCall = () => {
     });
 
     peer.on("stream", (stream) => setPeerStream(stream));
+	
+	peer.on("error", (err) => {
+	  console.error("Peer connection error:", err);
+	  leaveCall();
+	});
 
     peer.signal(callerInfo.signal);
     connectionRef.current = peer;
