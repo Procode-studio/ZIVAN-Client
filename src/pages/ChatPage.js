@@ -12,11 +12,11 @@ const peerConfig = {
       urls: 'stun:stun.l.google.com:19302'
     },
     {
-      urls: 'turn:global.turn.twilio.com:3478?transport=udp',
-      username: process.env.REACT_APP_TWILIO_SID,
-      credential: process.env.REACT_APP_TWILIO_TOKEN
+      urls: 'turn:freestun.net:3478',
+      username: free,
+      credential: free
     },
-  ]
+  ],
 };
 
 function ChatPage({ userId }) {
