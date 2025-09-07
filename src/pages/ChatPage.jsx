@@ -5,6 +5,8 @@ import { useSocket } from '../hooks/useSocket';
 import CreateChatModal from '../components/CreateChatModal.jsx';
 import CallUI from '../components/CallUI.jsx';
 import './ChatPage.css';
+import MinimizedCallView from '../components/MinimizedCallView.jsx'; // <-- ИМПОРТ
+import Avatar from '../components/Avatar.jsx';
 
 // Конфигурация STUN/TURN серверов для обхода сетевых ограничений
 const peerConfig = {
@@ -37,6 +39,9 @@ function ChatPage({ userId }) {
   const [callerInfo, setCallerInfo] = useState({ from: null, signal: null, fromName: '' });
   const [callAccepted, setCallAccepted] = useState(false);
   const [isCalling, setIsCalling] = useState(false);
+  const [isCallMinimized, setIsCallMinimized] = useState(false);
+  
+  const [onlineUsers, setOnlineUsers] = useState(new Set());
   
   // Refs для DOM-элементов и соединений
   const connectionRef = useRef();
@@ -68,7 +73,8 @@ function ChatPage({ userId }) {
           connectionRef.current.signal(signal);
         }
       });
-      socket.on("callEnded", leaveCall); // Слушаем событие завершения звонка от собеседника
+      socket.on("callEnded", leaveCall);
+	  socket.on('updateOnlineUsers', (users) => setOnlineUsers(new Set(users)));
     }
     return () => {
       if (socket) {
@@ -113,9 +119,8 @@ function ChatPage({ userId }) {
     }
   };
 
-  // Функция для совершения звонка
   const callUser = async (idToCall) => {
-    const currentStream = await startStream(false); // Камера изначально выключена
+    const currentStream = await startStream(false);
     if (!currentStream) return;
     setIsCalling(true);
     
@@ -128,10 +133,9 @@ function ChatPage({ userId }) {
     peer.on("error", leaveCall);
   };
 
-  // Функция для ответа на звонок
   const answerCall = async () => {
     setReceivingCall(false);
-    const currentStream = await startStream(false); // Камера изначально выключена
+    const currentStream = await startStream(false);
     if (!currentStream) return;
     setCallAccepted(true);
 
@@ -145,80 +149,135 @@ function ChatPage({ userId }) {
     peer.signal(callerInfo.signal);
   };
 
-  // Функция для завершения звонка
-  const leaveCall = () => {
+  const leaveCall = useCallback(() => {
     if (connectionRef.current) {
       const otherUserInCall = selectedChat?.members.find(m => m.id !== userId) || { id: callerInfo.from };
-      if (otherUserInCall.id) {
-        socket.emit("endCall", { to: otherUserInCall.id });
-      }
+      if (otherUserInCall.id) socket.emit("endCall", { to: otherUserInCall.id });
       connectionRef.current.destroy();
     }
     if (stream) stream.getTracks().forEach(track => track.stop());
+    
     setStream(null);
     setPeerStream(null);
     setCallAccepted(false);
     setIsCalling(false);
     setReceivingCall(false);
-  };
+    setIsCallMinimized(false);
+    setCallerInfo({ from: null, signal: null, fromName: '' });
+    connectionRef.current = null;
+  }, [socket, stream, selectedChat, userId, callerInfo.from]);
 
   const otherUser = selectedChat?.members.find(m => m.id !== userId);
+  const isOtherUserOnline = otherUser ? onlineUsers.has(otherUser.id) : false;
 
   return (
     <div>
-      {callAccepted && (
-        <CallUI stream={stream} peerStream={peerStream} onLeaveCall={leaveCall} peerName={otherUser?.username || callerInfo.fromName} />
+      {/* Окно звонка на весь экран (показывается, когда звонок принят и не свернут) */}
+      {callAccepted && !isCallMinimized && (
+        <CallUI 
+          stream={stream} 
+          peerStream={peerStream} 
+          onLeaveCall={leaveCall} 
+          peerName={otherUser?.username || callerInfo.fromName}
+          onMinimize={() => setIsCallMinimized(true)}
+        />
       )}
       
+      {/* Главный заголовок приложения */}
       <h1>ZIVAN <button onClick={() => { localStorage.removeItem('token'); window.location.href = '/login'; }}>Выйти</button></h1>
+      
+      {/* Кнопка создания нового чата */}
       <button onClick={() => setIsModalOpen(true)}>+ Новый чат</button>
+      
+      {/* Модальное окно для создания чата */}
       {isModalOpen && <CreateChatModal onClose={() => setIsModalOpen(false)} onChatCreated={() => getChats().then(setChats)} />}
       
+      {/* Основной контейнер чата */}
       <div className="chat-container">
+        
+        {/* Левая колонка: список чатов */}
         <div className="chat-list">
           {chats.map(chat => (
-            <div key={chat.id} className={`chat-item ${selectedChat?.id === chat.id ? 'selected' : ''}`} onClick={() => handleSelectChat(chat)}>
+            <div 
+              key={chat.id} 
+              className={`chat-item ${selectedChat?.id === chat.id ? 'selected' : ''}`} 
+              onClick={() => handleSelectChat(chat)}
+            >
               <h3>{chat.name || chat.members.find(m => m.id !== userId)?.username || 'Чат'}</h3>
             </div>
           ))}
         </div>
+        
+        {/* Правая колонка: просмотр сообщений */}
         <div className="message-view">
+          
+          {/* Свернутая панель звонка (показывается, когда звонок принят и свернут) */}
+          {callAccepted && isCallMinimized && (
+            <MinimizedCallView 
+              peerName={otherUser?.username || callerInfo.fromName} 
+              onMaximize={() => setIsCallMinimized(false)} 
+              onLeaveCall={leaveCall} 
+            />
+          )}
+
           {selectedChat ? (
             <>
+              {/* Заголовок выбранного чата */}
               <div className="chat-header">
-                <h2>{selectedChat.name || otherUser?.username || 'Чат'}</h2>
-                {selectedChat.type === 'private' && otherUser && !isCalling && !callAccepted && !receivingCall && (
-                  <button onClick={() => callUser(otherUser.id)}>📞 Позвонить</button>
-                )}
-                {isCalling && <p><i>Вызов...</i></p>}
+                <Avatar username={otherUser?.username} size={40} />
+                <div className="chat-header-info">
+                  <h2>{selectedChat.name || otherUser?.username || 'Чат'}</h2>
+                  <p className="status">{isOtherUserOnline ? 'в сети' : 'не в сети'}</p>
+                </div>
+                <div className="chat-header-actions">
+                  {selectedChat.type === 'private' && otherUser && !isCalling && !callAccepted && !receivingCall && (
+                    <button onClick={() => callUser(otherUser.id)} disabled={!isOtherUserOnline} className="call-btn">📞</button>
+                  )}
+                  {isCalling && <p><i>Вызов...</i></p>}
+                </div>
               </div>
+              
+              {/* Список сообщений */}
               <div className="messages-list">
                 {messages.map(msg => {
                   const isOwnMessage = msg.sender_id === userId;
                   return (
                     <div key={msg.id} className={`message-row ${isOwnMessage ? 'own' : 'other'}`}>
-                      <div className="message"><p>{msg.content}</p><small>{new Date(msg.timestamp).toLocaleTimeString()}</small></div>
+                      <div className="message">
+                        <p>{msg.content}</p>
+                        <small>{new Date(msg.timestamp).toLocaleTimeString()}</small>
+                      </div>
                     </div>
                   );
                 })}
                 <div ref={messagesEndRef} />
               </div>
+              
+              {/* Форма отправки сообщения */}
               <form onSubmit={handleSendMessage}>
-                <input type="text" placeholder="Введите сообщение..." value={newMessage} onChange={(e) => setNewMessage(e.target.value)} />
+                <input 
+                  type="text" 
+                  placeholder="Введите сообщение..." 
+                  value={newMessage} 
+                  onChange={(e) => setNewMessage(e.target.value)} 
+                />
                 <button type="submit">Отправить</button>
               </form>
             </>
           ) : (
-            <p>Выберите чат, чтобы начать общение.</p>
+            <p className="select-chat-prompt">Выберите чат, чтобы начать общение.</p>
           )}
         </div>
       </div>
 
+      {/* Уведомление о входящем звонке */}
       {receivingCall && !callAccepted && (
         <div className="caller-notification">
           <h1>Вам звонит {callerInfo.fromName}</h1>
-          <button onClick={answerCall}>✅</button>
-          <button onClick={() => setReceivingCall(false)}>❌</button>
+          <div>
+            <button className="control-btn" onClick={answerCall}>✅</button>
+            <button className="control-btn hang-up" onClick={() => setReceivingCall(false)}>❌</button>
+          </div>
         </div>
       )}
     </div>

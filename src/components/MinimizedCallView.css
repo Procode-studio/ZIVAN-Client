@@ -1,0 +1,30 @@
+.minimized-call {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 15px;
+  background-color: #5288c1;
+  color: white;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.minimized-call-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.minimized-call-info h4, .minimized-call-info p {
+  margin: 0;
+}
+.minimized-call-actions button {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 1.5em;
+  cursor: pointer;
+  margin-left: 15px;
+}
+.hang-up-mini {
+  color: #e74c3c;
+}

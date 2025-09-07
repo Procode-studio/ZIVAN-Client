@@ -113,3 +113,46 @@
   border-radius: 8px;
   z-index: 100;
 }
+
+.chat-header {
+  display: flex;
+  align-items: center;
+  padding-bottom: 15px;
+  border-bottom: 1px solid #eee;
+}
+
+.chat-header-info {
+  margin-left: 15px;
+}
+
+.chat-header-info h2 {
+  margin: 0;
+  font-size: 1.2em;
+}
+
+.chat-header-info .status {
+  margin: 0;
+  font-size: 0.9em;
+  color: #666;
+}
+
+.chat-header-actions {
+  margin-left: auto;
+}
+
+.call-btn {
+  background: none;
+  border: none;
+  font-size: 1.8em;
+  cursor: pointer;
+}
+
+.call-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.select-chat-prompt {
+  margin: auto;
+  color: #888;
+}
