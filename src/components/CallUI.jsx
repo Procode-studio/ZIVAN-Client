@@ -9,20 +9,14 @@ function CallUI({ stream, peerStream, onLeaveCall, peerName, onMinimize, isCalli
   const myVideo = useRef();
   const userVideo = useRef();
 
-  // --- ГЛАВНОЕ ИСПРАВЛЕНИЕ ЗДЕСЬ ---
+  // Этот useEffect отвечает за ВАШЕ видео
   useEffect(() => {
     if (stream && myVideo.current) {
-      // Привязываем поток к видео-элементу
       myVideo.current.srcObject = stream;
-      
-      // Убеждаемся, что состояние дорожки соответствует состоянию компонента
-      stream.getVideoTracks().forEach(track => {
-        track.enabled = isCameraOn;
-      });
     }
-  // Этот эффект теперь будет срабатывать каждый раз, когда меняется isCameraOn
-  }, [stream, isCameraOn]);
+  }, [stream]);
 
+  // Этот useEffect отвечает за видео СОБЕСЕДНИКА
   useEffect(() => {
     if (peerStream && userVideo.current) {
       userVideo.current.srcObject = peerStream;
@@ -48,8 +42,12 @@ function CallUI({ stream, peerStream, onLeaveCall, peerName, onMinimize, isCalli
   };
 
   const toggleCamera = () => {
-    // Просто меняем состояние. useEffect сделает все остальное.
-    setIsCameraOn(prev => !prev);
+    if (stream) {
+      stream.getVideoTracks().forEach(track => {
+        track.enabled = !track.enabled;
+      });
+      setIsCameraOn(prev => !prev);
+    }
   };
 
   return (
@@ -60,36 +58,46 @@ function CallUI({ stream, peerStream, onLeaveCall, peerName, onMinimize, isCalli
       </div>
 
       <div className="call-videos">
-        {peerStream ? (
-          <video className="user-video" playsInline ref={userVideo} autoPlay />
-        ) : (
+        {/* --- НАЧАЛО ГЛАВНОГО ИСПРАВЛЕНИЯ --- */}
+        
+        {/* Видео собеседника */}
+        <video 
+          className="user-video" 
+          style={{ display: peerStream ? 'block' : 'none' }} 
+          playsInline 
+          ref={userVideo} 
+          autoPlay 
+        />
+        {!peerStream && (
           <div className="user-avatar-large">
             <Avatar username={peerName} size={150} />
           </div>
         )}
         
+        {/* Ваше видео */}
         <div className="my-video-container">
-          {/* Теперь этот блок правильно отображает видео или аватар */}
           <video 
             className="my-video" 
-            style={{ display: isCameraOn ? 'block' : 'none' }} 
+            style={{ display: stream && isCameraOn ? 'block' : 'none' }} 
             playsInline 
             muted 
             ref={myVideo} 
             autoPlay 
           />
-          {!isCameraOn && (
+          {(!stream || !isCameraOn) && (
             <div className="my-video">
               <Avatar username="You" size={100} />
             </div>
           )}
         </div>
+
+        {/* --- КОНЕЦ ГЛАВНОГО ИСПРАВЛЕНИЯ --- */}
       </div>
 
       <div className="call-controls">
         <button className="control-btn" onClick={onMinimize}>⬇️</button>
         <button className="control-btn" onClick={toggleMic}>{isMicOn ? '🎤' : '🔇'}</button>
-        <button className="control-btn" onClick={toggleCamera}>{isCameraOn ? '📹' : '📸'}</button>
+        <button className="control-btn" onClick={toggleCamera}>{isCameraOn ? '📸' : '📹'}</button>
         <button className="control-btn hang-up" onClick={onLeaveCall}>📞</button>
       </div>
     </div>
