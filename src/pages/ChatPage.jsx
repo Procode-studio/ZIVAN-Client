@@ -179,13 +179,16 @@ function ChatPage({ userId }) {
 
     const peer = new Peer({
       initiator: true,
-      trickle: false,
       stream: currentStream,
       config: peerConfig,
     });
 
-    peer.on("signal", (data) => {
-      socket.emit("callUser", { userToCall: idToCall, signalData: data, from: userId });
+     peer.on("signal", (data) => {
+      if (data.type === 'offer') {
+        socket.emit("callUser", { userToCall: idToCall, signalData: data, from: userId });
+      } else if (data.candidate) {
+        socket.emit("iceCandidate", { to: idToCall, candidate: data });
+      }
     });
 
     peer.on("stream", (stream) => setPeerStream(stream));
@@ -226,6 +229,10 @@ function ChatPage({ userId }) {
       setCallAccepted(true);
       peer.signal(signal);
     });
+	
+	socket.on("iceCandidate", (candidate) => {
+      peer.signal(candidate);
+    });
 
     connectionRef.current = peer;
   }).catch(err => {
@@ -242,13 +249,16 @@ const answerCall = () => {
 
     const peer = new Peer({
       initiator: false,
-      trickle: false,
       stream: currentStream,
       config: peerConfig,
     });
 
     peer.on("signal", (data) => {
-      socket.emit("acceptCall", { signal: data, to: callerInfo.from });
+      if (data.type === 'answer') {
+        socket.emit("acceptCall", { signal: data, to: callerInfo.from });
+      } else if (data.candidate) {
+        socket.emit("iceCandidate", { to: callerInfo.from, candidate: data });
+      }
     });
 
     peer.on("stream", (stream) => setPeerStream(stream));
@@ -257,6 +267,10 @@ const answerCall = () => {
 	  console.error("Peer connection error:", err);
 	  leaveCall();
 	});
+	
+	socket.on("iceCandidate", (candidate) => {
+      peer.signal(candidate);
+    });
 
     peer.signal(callerInfo.signal);
     connectionRef.current = peer;
