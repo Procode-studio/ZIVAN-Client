@@ -9,14 +9,16 @@ import './ChatPage.css';
 const peerConfig = {
   iceServers: [
     {
-      urls: 'stun:stun.l.google.com:19302'
-    },
-    {
-      urls: 'turn:freestun.net:3478',
-      username: free,
-      credential: free
-    },
-  ],
+      urls: [
+        "stun:stun.openrelay.metered.ca:80",
+        "turn:openrelay.metered.ca:80",
+        "turn:openrelay.metered.ca:443",
+        "turn:openrelay.metered.ca:443?transport=tcp"
+      ],
+      username: "openrelayproject",
+      credential: "openrelayproject"
+    }
+  ]
 };
 
 function ChatPage({ userId }) {
