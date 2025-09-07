@@ -138,13 +138,21 @@ function ChatPage({ userId }) {
     }
   };
 
-  const startStream = async (cameraOn = false) => {
+  const startStreamAndInitPeer = async (initiator) => {
     try {
-      const currentStream = await navigator.mediaDevices.getUserMedia({ video: cameraOn, audio: true });
+      const currentStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       setStream(currentStream);
-      return currentStream;
+
+      const peer = new Peer({ 
+        initiator, 
+        trickle: false, 
+        stream: currentStream,
+        config: peerConfig 
+      });
+      connectionRef.current = peer;
+      return peer;
     } catch (err) {
-      alert("Не удалось получить доступ к микрофону или камере. Проверьте разрешения в браузере и убедитесь, что устройства не используются другим приложением.");
+      alert("Не удалось получить доступ к микрофону/камере.");
       return null;
     }
   };
