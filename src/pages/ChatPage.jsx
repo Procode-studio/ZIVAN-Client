@@ -42,48 +42,82 @@ function ChatPage({ userId }) {
   const [isCallMinimized, setIsCallMinimized] = useState(false);
   
   const [onlineUsers, setOnlineUsers] = useState(new Set());
+  const [typingUsers, setTypingUsers] = useState({});
   
-  // Refs для DOM-элементов и соединений
+  const typingTimeoutRef = useRef(null);
+
   const connectionRef = useRef();
   const messagesEndRef = useRef(null);
 
-  // Обработчик новых сообщений из сокета
   const handleNewMessage = useCallback((message) => {
-    // Добавляем сообщение в список, только если открыт соответствующий чат
     if (selectedChat && message.chat_id === selectedChat.id) {
       setMessages((prevMessages) => [...prevMessages, message]);
     }
   }, [selectedChat]);
+  
+  const handleUserTyping = useCallback(({ userId, chatId }) => {
+	  if (selectedChat?.id === chatId) {
+		setTypingUsers(prev => ({ ...prev, [userId]: true }));
+	  }
+	}, [selectedChat]);
 
-  const { joinRoom, sendMessage, socket } = useSocket(import.meta.env.VITE_API_URL, handleNewMessage);
+	const handleUserStoppedTyping = useCallback(({ userId, chatId }) => {
+	  if (selectedChat?.id === chatId) {
+		setTypingUsers(prev => {
+		  const newTypingUsers = { ...prev };
+		  delete newTypingUsers[userId];
+		  return newTypingUsers;
+		});
+	  }
+	}, [selectedChat]);
+	
+	const handleTyping = (e) => {
+	  setNewMessage(e.target.value);
+	  if (typingTimeoutRef.current) {
+		clearTimeout(typingTimeoutRef.current);
+	  } else {
+		startTyping(selectedChat.id);
+	  }
+	  typingTimeoutRef.current = setTimeout(() => {
+		stopTyping(selectedChat.id);
+		typingTimeoutRef.current = null;
+	  }, 2000);
+	};
 
-  // Эффект для установки слушателей событий сокета
+  const { joinRoom, sendMessage, startTyping, stopTyping, socket } = useSocket(
+	  import.meta.env.VITE_API_URL,
+	  handleNewMessage,
+	  handleUserTyping, 
+	  handleUserStoppedTyping 
+	);
+
   useEffect(() => {
-    if (socket) {
-      socket.on("hey", (data) => {
-        const chatWithCaller = chats.find(chat => chat.members.some(m => m.id === data.from));
-        const callerName = chatWithCaller?.members.find(m => m.id === data.from)?.username || 'Unknown Caller';
-        setCallerInfo({ from: data.from, signal: data.signal, fromName: callerName });
-        setReceivingCall(true);
-      });
-      socket.on("callAccepted", (signal) => {
-        setIsCalling(false);
-        setCallAccepted(true);
-        if (connectionRef.current) {
-          connectionRef.current.signal(signal);
-        }
-      });
-      socket.on("callEnded", leaveCall);
-	  socket.on('updateOnlineUsers', (users) => setOnlineUsers(new Set(users)));
-    }
-    return () => {
-      if (socket) {
-        socket.off("hey");
-        socket.off("callAccepted");
-        socket.off("callEnded");
-      }
-    };
-  }, [socket, chats]); // Добавляем chats в зависимости, чтобы callerName был актуальным
+	  if (socket) {
+		socket.on("hey", (data) => {
+		  const chatWithCaller = chats.find(chat => chat.members.some(m => m.id === data.from));
+		  const callerName = chatWithCaller?.members.find(m => m.id === data.from)?.username || 'Unknown';
+		  setCallerInfo({ from: data.from, signal: data.signal, fromName: callerName });
+		  setReceivingCall(true);
+		});
+		socket.on("callAccepted", (signal) => {
+		  setIsCalling(false);
+		  setCallAccepted(true);
+		  if (connectionRef.current) {
+			connectionRef.current.signal(signal);
+		  }
+		});
+		socket.on("callEnded", leaveCall);
+		socket.on('updateOnlineUsers', (users) => setOnlineUsers(new Set(users)));
+	  }
+	  return () => {
+		if (socket) {
+		  socket.off("hey");
+		  socket.off("callAccepted");
+		  socket.off("callEnded");
+		  socket.off('updateOnlineUsers');
+		}
+	  };
+	}, [socket, chats, leaveCall]);
 
   // Эффекты для загрузки чатов и авто-прокрутки
   useEffect(() => { getChats().then(setChats); }, []);
@@ -150,29 +184,34 @@ function ChatPage({ userId }) {
   };
 
   const leaveCall = useCallback(() => {
-    if (connectionRef.current) {
-      const otherUserInCall = selectedChat?.members.find(m => m.id !== userId) || { id: callerInfo.from };
-      if (otherUserInCall.id) socket.emit("endCall", { to: otherUserInCall.id });
-      connectionRef.current.destroy();
+  if (connectionRef.current) {
+    const otherUserInCall = selectedChat?.members.find(m => m.id !== userId) || { id: callerInfo.from };
+    if (otherUserInCall.id) {
+      socket.emit("endCall", { to: otherUserInCall.id });
     }
-    if (stream) stream.getTracks().forEach(track => track.stop());
-    
-    setStream(null);
-    setPeerStream(null);
-    setCallAccepted(false);
-    setIsCalling(false);
-    setReceivingCall(false);
-    setIsCallMinimized(false);
-    setCallerInfo({ from: null, signal: null, fromName: '' });
-    connectionRef.current = null;
-  }, [socket, stream, selectedChat, userId, callerInfo.from]);
+    connectionRef.current.destroy();
+  }
+  if (stream) {
+    stream.getTracks().forEach(track => track.stop());
+  }
+  
+  // Полный сброс всех состояний
+  setStream(null);
+  setPeerStream(null);
+  setCallAccepted(false);
+  setIsCalling(false);
+  setReceivingCall(false);
+  setIsCallMinimized(false);
+  setCallerInfo({ from: null, signal: null, fromName: '' });
+  connectionRef.current = null;
+}, [socket, stream, selectedChat, userId, callerInfo.from]);
 
   const otherUser = selectedChat?.members.find(m => m.id !== userId);
   const isOtherUserOnline = otherUser ? onlineUsers.has(otherUser.id) : false;
+  const isOtherUserTyping = otherUser ? typingUsers[otherUser.id] : false;
 
   return (
     <div>
-      {/* Окно звонка на весь экран (показывается, когда звонок принят и не свернут) */}
       {callAccepted && !isCallMinimized && (
         <CallUI 
           stream={stream} 
@@ -180,22 +219,15 @@ function ChatPage({ userId }) {
           onLeaveCall={leaveCall} 
           peerName={otherUser?.username || callerInfo.fromName}
           onMinimize={() => setIsCallMinimized(true)}
+          isCalling={isCalling}
         />
       )}
       
-      {/* Главный заголовок приложения */}
       <h1>ZIVAN <button onClick={() => { localStorage.removeItem('token'); window.location.href = '/login'; }}>Выйти</button></h1>
-      
-      {/* Кнопка создания нового чата */}
       <button onClick={() => setIsModalOpen(true)}>+ Новый чат</button>
-      
-      {/* Модальное окно для создания чата */}
       {isModalOpen && <CreateChatModal onClose={() => setIsModalOpen(false)} onChatCreated={() => getChats().then(setChats)} />}
       
-      {/* Основной контейнер чата */}
       <div className="chat-container">
-        
-        {/* Левая колонка: список чатов */}
         <div className="chat-list">
           {chats.map(chat => (
             <div 
@@ -207,11 +239,7 @@ function ChatPage({ userId }) {
             </div>
           ))}
         </div>
-        
-        {/* Правая колонка: просмотр сообщений */}
         <div className="message-view">
-          
-          {/* Свернутая панель звонка (показывается, когда звонок принят и свернут) */}
           {callAccepted && isCallMinimized && (
             <MinimizedCallView 
               peerName={otherUser?.username || callerInfo.fromName} 
@@ -219,15 +247,13 @@ function ChatPage({ userId }) {
               onLeaveCall={leaveCall} 
             />
           )}
-
           {selectedChat ? (
             <>
-              {/* Заголовок выбранного чата */}
               <div className="chat-header">
                 <Avatar username={otherUser?.username} size={40} />
                 <div className="chat-header-info">
                   <h2>{selectedChat.name || otherUser?.username || 'Чат'}</h2>
-                  <p className="status">{isOtherUserOnline ? 'в сети' : 'не в сети'}</p>
+                  <p className="status">{isOtherUserTyping ? 'печатает...' : (isOtherUserOnline ? 'в сети' : 'не в сети')}</p>
                 </div>
                 <div className="chat-header-actions">
                   {selectedChat.type === 'private' && otherUser && !isCalling && !callAccepted && !receivingCall && (
@@ -236,30 +262,23 @@ function ChatPage({ userId }) {
                   {isCalling && <p><i>Вызов...</i></p>}
                 </div>
               </div>
-              
-              {/* Список сообщений */}
               <div className="messages-list">
                 {messages.map(msg => {
                   const isOwnMessage = msg.sender_id === userId;
                   return (
                     <div key={msg.id} className={`message-row ${isOwnMessage ? 'own' : 'other'}`}>
-                      <div className="message">
-                        <p>{msg.content}</p>
-                        <small>{new Date(msg.timestamp).toLocaleTimeString()}</small>
-                      </div>
+                      <div className="message"><p>{msg.content}</p><small>{new Date(msg.timestamp).toLocaleTimeString()}</small></div>
                     </div>
                   );
                 })}
                 <div ref={messagesEndRef} />
               </div>
-              
-              {/* Форма отправки сообщения */}
               <form onSubmit={handleSendMessage}>
                 <input 
                   type="text" 
                   placeholder="Введите сообщение..." 
                   value={newMessage} 
-                  onChange={(e) => setNewMessage(e.target.value)} 
+                  onChange={handleTyping} // <-- ИЗМЕНЕНИЕ ЗДЕСЬ
                 />
                 <button type="submit">Отправить</button>
               </form>
@@ -270,7 +289,6 @@ function ChatPage({ userId }) {
         </div>
       </div>
 
-      {/* Уведомление о входящем звонке */}
       {receivingCall && !callAccepted && (
         <div className="caller-notification">
           <h1>Вам звонит {callerInfo.fromName}</h1>
@@ -282,6 +300,5 @@ function ChatPage({ userId }) {
       )}
     </div>
   );
-}
 
 export default ChatPage;

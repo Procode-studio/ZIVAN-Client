@@ -1,53 +1,36 @@
 import { useEffect, useRef, useCallback } from 'react';
 import io from 'socket.io-client';
 
-// --- ИЗМЕНЕНИЕ: Добавляем 'url' как первый аргумент ---
-export const useSocket = (url, onNewMessage) => { 
+export const useSocket = (url, onNewMessage, onUserTyping, onUserStoppedTyping) => {
   const socketRef = useRef(null);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
-    if (!token || !url) return; // <-- Добавляем проверку на url
+    if (!token || !url) return;
 
-    // --- ИЗМЕНЕНИЕ: Используем 'url' вместо import.meta.env ---
     socketRef.current = io(url, {
-      auth: {
-        token: token,
-      },
+      auth: { token },
       transports: ['websocket', 'polling'],
     });
-
     const socket = socketRef.current;
 
-    socket.on('connect', () => {
-      console.log('Socket.IO подключен:', socket.id);
-    });
+    socket.on('connect', () => console.log('Socket.IO подключен:', socket.id));
+    socket.on('disconnect', () => console.log('Socket.IO отключен'));
+    if (onNewMessage) socket.on('newMessage', onNewMessage);
+    if (onUserTyping) socket.on('userTyping', onUserTyping);
+    if (onUserStoppedTyping) socket.on('userStoppedTyping', onUserStoppedTyping);
 
-    socket.on('disconnect', () => {
-      console.log('Socket.IO отключен');
-    });
-
-    socket.on('newMessage', (message) => {
-      if (onNewMessage) {
-        onNewMessage(message);
-      }
-    });
-    
     return () => {
       if (socket) {
         socket.disconnect();
       }
     };
-  // --- ИЗМЕНЕНИЕ: Добавляем 'url' в массив зависимостей ---
-  }, [url, onNewMessage]); 
+  }, [url, onNewMessage, onUserTyping, onUserStoppedTyping]);
 
-  const joinRoom = useCallback((chatId) => {
-    socketRef.current?.emit('joinRoom', chatId);
-  }, []);
+  const joinRoom = useCallback((chatId) => socketRef.current?.emit('joinRoom', chatId), []);
+  const sendMessage = useCallback((data) => socketRef.current?.emit('sendMessage', data), []);
+  const startTyping = useCallback((chatId) => socketRef.current?.emit('startTyping', { chatId }), []);
+  const stopTyping = useCallback((chatId) => socketRef.current?.emit('stopTyping', { chatId }), []);
 
-  const sendMessage = useCallback((messageData) => {
-    socketRef.current?.emit('sendMessage', messageData);
-  }, []);
-
-  return { joinRoom, sendMessage, socket: socketRef.current };
+  return { joinRoom, sendMessage, startTyping, stopTyping, socket: socketRef.current };
 };

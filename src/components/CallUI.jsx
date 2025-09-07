@@ -2,30 +2,26 @@ import React, { useState, useEffect, useRef } from 'react';
 import Avatar from './Avatar.jsx';
 import './CallUI.css';
 
-function CallUI({ stream, peerStream, onLeaveCall, peerName }) {
+function CallUI({ stream, peerStream, onLeaveCall, peerName, onMinimize }) {
   const [isMicOn, setIsMicOn] = useState(true);
-  const [isCameraOn, setIsCameraOn] = useState(true);
+  const [isCameraOn, setIsCameraOn] = useState(false); // Камера по умолчанию выключена
   const [callDuration, setCallDuration] = useState(0);
   const myVideo = useRef();
 
   useEffect(() => {
-    if (stream && myVideo.current) {
+    if (stream) {
       myVideo.current.srcObject = stream;
+      // Применяем начальное состояние камеры
+      stream.getVideoTracks().forEach(track => track.enabled = isCameraOn);
     }
   }, [stream]);
   
   useEffect(() => {
-    const timer = setInterval(() => {
-      setCallDuration(prev => prev + 1);
-    }, 1000);
+    const timer = setInterval(() => setCallDuration(prev => prev + 1), 1000);
     return () => clearInterval(timer);
   }, []);
 
-  const formatDuration = (seconds) => {
-    const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
-    const secs = (seconds % 60).toString().padStart(2, '0');
-    return `${mins}:${secs}`;
-  };
+  const formatDuration = (seconds) => new Date(seconds * 1000).toISOString().substr(14, 5);
 
   const toggleMic = () => {
     stream.getAudioTracks().forEach(track => track.enabled = !track.enabled);
@@ -41,14 +37,14 @@ function CallUI({ stream, peerStream, onLeaveCall, peerName }) {
     <div className="call-overlay">
       <div className="call-info">
         <h2>{peerName}</h2>
-        <p>{formatDuration(callDuration)}</p>
+        <p>{isCalling ? 'Вызов...' : formatDuration(callDuration)}</p>
       </div>
 
       <div className="call-videos">
         {peerStream ? (
           <video className="user-video" playsInline ref={ref => { if (ref) ref.srcObject = peerStream; }} autoPlay />
         ) : (
-          <div className="user-avatar">
+          <div className="user-avatar-large">
             <Avatar username={peerName} size={150} />
           </div>
         )}
@@ -63,8 +59,9 @@ function CallUI({ stream, peerStream, onLeaveCall, peerName }) {
       </div>
 
       <div className="call-controls">
+        <button className="control-btn" onClick={onMinimize}>⬇️</button>
         <button className="control-btn" onClick={toggleMic}>{isMicOn ? '🎤' : '🔇'}</button>
-        <button className="control-btn" onClick={toggleCamera}>{isCameraOn ? '📹' : '📸'}</button>
+        <button className="control-btn" onClick={toggleCamera}>{isCameraOn ? '📸' : '📹'}</button>
         <button className="control-btn hang-up" onClick={onLeaveCall}>📞</button>
       </div>
     </div>
