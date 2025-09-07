@@ -7,30 +7,44 @@ function CallUI({ stream, peerStream, onLeaveCall, peerName, onMinimize, isCalli
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [callDuration, setCallDuration] = useState(0);
   const myVideo = useRef();
+  const userVideo = useRef(); // <-- Добавляем ref для видео собеседника
 
   useEffect(() => {
-    if (stream) {
+    if (stream && myVideo.current) {
       myVideo.current.srcObject = stream;
       // Применяем начальное состояние камеры
       stream.getVideoTracks().forEach(track => track.enabled = isCameraOn);
     }
-  }, [stream]);
+  }, [stream, isCameraOn]);
+
+  // --- НОВЫЙ useEffect для peerStream ---
+  useEffect(() => {
+    if (peerStream && userVideo.current) {
+      userVideo.current.srcObject = peerStream;
+    }
+  }, [peerStream]);
   
   useEffect(() => {
-    const timer = setInterval(() => setCallDuration(prev => prev + 1), 1000);
-    return () => clearInterval(timer);
-  }, []);
+    if (!isCalling) {
+      const timer = setInterval(() => setCallDuration(prev => prev + 1), 1000);
+      return () => clearInterval(timer);
+    }
+  }, [isCalling]);
 
   const formatDuration = (seconds) => new Date(seconds * 1000).toISOString().substr(14, 5);
 
   const toggleMic = () => {
-    stream.getAudioTracks().forEach(track => track.enabled = !track.enabled);
-    setIsMicOn(prev => !prev);
+    if (stream) {
+      stream.getAudioTracks().forEach(track => track.enabled = !track.enabled);
+      setIsMicOn(prev => !prev);
+    }
   };
 
   const toggleCamera = () => {
-    stream.getVideoTracks().forEach(track => track.enabled = !track.enabled);
-    setIsCameraOn(prev => !prev);
+    if (stream) {
+      stream.getVideoTracks().forEach(track => track.enabled = !track.enabled);
+      setIsCameraOn(prev => !prev);
+    }
   };
 
   return (
@@ -42,7 +56,7 @@ function CallUI({ stream, peerStream, onLeaveCall, peerName, onMinimize, isCalli
 
       <div className="call-videos">
         {peerStream ? (
-          <video className="user-video" playsInline ref={ref => { if (ref) ref.srcObject = peerStream; }} autoPlay />
+          <video className="user-video" playsInline ref={userVideo} autoPlay />
         ) : (
           <div className="user-avatar-large">
             <Avatar username={peerName} size={150} />
@@ -50,10 +64,12 @@ function CallUI({ stream, peerStream, onLeaveCall, peerName, onMinimize, isCalli
         )}
         
         <div className="my-video-container">
-          {isCameraOn ? (
+          {stream && isCameraOn ? (
             <video className="my-video" playsInline muted ref={myVideo} autoPlay />
           ) : (
-            <Avatar username="You" size={100} />
+            <div className="my-video">
+              <Avatar username="You" size={100} />
+            </div>
           )}
         </div>
       </div>
@@ -61,7 +77,7 @@ function CallUI({ stream, peerStream, onLeaveCall, peerName, onMinimize, isCalli
       <div className="call-controls">
         <button className="control-btn" onClick={onMinimize}>⬇️</button>
         <button className="control-btn" onClick={toggleMic}>{isMicOn ? '🎤' : '🔇'}</button>
-        <button className="control-btn" onClick={toggleCamera}>{isCameraOn ? '📸' : '📹'}</button>
+        <button className="control-btn" onClick={toggleCamera}>{isCameraOn ? '📹' : '📸'}</button>
         <button className="control-btn hang-up" onClick={onLeaveCall}>📞</button>
       </div>
     </div>
