@@ -3,38 +3,56 @@ import Peer from 'simple-peer';
 import { getChats, getMessages } from '../api/chatApi';
 import { useSocket } from '../hooks/useSocket';
 import CreateChatModal from '../components/CreateChatModal.jsx';
-import CallWindow from '../components/CallWindow.jsx';
+import CallUI from '../components/CallUI.jsx';
 import './ChatPage.css';
 
+// Конфигурация STUN/TURN серверов для обхода сетевых ограничений
+const peerConfig = {
+  iceServers: [
+    {
+      urls: [
+        "stun:stun.openrelay.metered.ca:80",
+        "turn:openrelay.metered.ca:80",
+        "turn:openrelay.metered.ca:443",
+        "turn:openrelay.metered.ca:443?transport=tcp"
+      ],
+      username: "openrelayproject",
+      credential: "openrelayproject"
+    }
+  ]
+};
+
 function ChatPage({ userId }) {
-  // Состояния чата
+  // Состояния для чатов и сообщений
   const [chats, setChats] = useState([]);
   const [selectedChat, setSelectedChat] = useState(null);
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   
-  // Состояния звонка
+  // Состояния для звонков
   const [stream, setStream] = useState(null);
+  const [peerStream, setPeerStream] = useState(null);
   const [receivingCall, setReceivingCall] = useState(false);
-  const [callerInfo, setCallerInfo] = useState({ from: null, signal: null });
+  const [callerInfo, setCallerInfo] = useState({ from: null, signal: null, fromName: '' });
   const [callAccepted, setCallAccepted] = useState(false);
-  const [isCalling, setIsCalling] = useState(false); // <-- НОВОЕ: для отображения "Вызов..."
+  const [isCalling, setIsCalling] = useState(false);
   
-  const myVideo = useRef();
-  const userVideo = useRef();
+  // Refs для DOM-элементов и соединений
   const connectionRef = useRef();
   const messagesEndRef = useRef(null);
 
+  // Обработчик новых сообщений из сокета
   const handleNewMessage = useCallback((message) => {
+    // Добавляем сообщение в список, только если открыт соответствующий чат
     if (selectedChat && message.chat_id === selectedChat.id) {
-      setMessages((prev) => [...prev, message]);
+      setMessages((prevMessages) => [...prevMessages, message]);
     }
   }, [selectedChat]);
 
-  const apiUrl = import.meta.env.VITE_API_URL;
-  const { joinRoom, sendMessage, socket } = useSocket(apiUrl, handleNewMessage);
+  const { joinRoom, sendMessage, socket } = useSocket(import.meta.env.VITE_API_URL, handleNewMessage);
 
+  // Эффект для установки слушателей событий сокета
   useEffect(() => {
     if (socket) {
       socket.on("hey", (data) => {
@@ -46,9 +64,11 @@ function ChatPage({ userId }) {
       socket.on("callAccepted", (signal) => {
         setIsCalling(false);
         setCallAccepted(true);
-        connectionRef.current.signal(signal);
+        if (connectionRef.current) {
+          connectionRef.current.signal(signal);
+        }
       });
-      socket.on("callEnded", leaveCall);
+      socket.on("callEnded", leaveCall); // Слушаем событие завершения звонка от собеседника
     }
     return () => {
       if (socket) {
@@ -57,31 +77,45 @@ function ChatPage({ userId }) {
         socket.off("callEnded");
       }
     };
-  }, [socket, chats]);
+  }, [socket, chats]); // Добавляем chats в зависимости, чтобы callerName был актуальным
 
+  // Эффекты для загрузки чатов и авто-прокрутки
   useEffect(() => { getChats().then(setChats); }, []);
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
+  // Обработчик выбора чата
   const handleSelectChat = async (chat) => {
     setSelectedChat(chat);
+    setMessages([]);
     const chatMessages = await getMessages(chat.id);
     setMessages(chatMessages);
     joinRoom(chat.id);
   };
 
+  // Обработчик отправки сообщения
+  const handleSendMessage = (e) => {
+    e.preventDefault();
+    if (newMessage.trim() && selectedChat) {
+      sendMessage({ chatId: selectedChat.id, content: newMessage });
+      setNewMessage('');
+    }
+  };
+
+  // Функция для получения доступа к камере/микрофону
   const startStream = async (cameraOn = false) => {
     try {
       const currentStream = await navigator.mediaDevices.getUserMedia({ video: cameraOn, audio: true });
       setStream(currentStream);
       return currentStream;
     } catch (err) {
-      alert("Не удалось получить доступ к микрофону. Проверьте разрешения.");
+      alert("Не удалось получить доступ к микрофону или камере. Проверьте разрешения в браузере и убедитесь, что устройства не используются другим приложением.");
       return null;
     }
   };
 
+  // Функция для совершения звонка
   const callUser = async (idToCall) => {
-    const currentStream = await startStream(true); 
+    const currentStream = await startStream(false); // Камера изначально выключена
     if (!currentStream) return;
     setIsCalling(true);
     
@@ -89,47 +123,46 @@ function ChatPage({ userId }) {
     connectionRef.current = peer;
 
     peer.on("signal", (data) => socket.emit("callUser", { userToCall: idToCall, signalData: data, from: userId }));
-    peer.on("stream", setPeerStream);
+    peer.on("stream", (stream) => setPeerStream(stream));
     peer.on("close", leaveCall);
     peer.on("error", leaveCall);
   };
 
+  // Функция для ответа на звонок
   const answerCall = async () => {
     setReceivingCall(false);
-    setCallAccepted(true);
-    const currentStream = await startStream(true);
+    const currentStream = await startStream(false); // Камера изначально выключена
     if (!currentStream) return;
+    setCallAccepted(true);
 
     const peer = new Peer({ initiator: false, trickle: false, stream: currentStream, config: peerConfig });
     connectionRef.current = peer;
 
     peer.on("signal", (data) => socket.emit("acceptCall", { signal: data, to: callerInfo.from }));
-    peer.on("stream", setPeerStream);
+    peer.on("stream", (stream) => setPeerStream(stream));
     peer.on("close", leaveCall);
     peer.on("error", leaveCall);
     peer.signal(callerInfo.signal);
   };
 
-const leaveCall = () => {
-  if (connectionRef.current) {
-    const otherUserInCall = selectedChat?.members.find(m => m.id !== userId) || { id: callerInfo.from };
-    if (otherUserInCall.id) {
-      socket.emit("endCall", { to: otherUserInCall.id });
+  // Функция для завершения звонка
+  const leaveCall = () => {
+    if (connectionRef.current) {
+      const otherUserInCall = selectedChat?.members.find(m => m.id !== userId) || { id: callerInfo.from };
+      if (otherUserInCall.id) {
+        socket.emit("endCall", { to: otherUserInCall.id });
+      }
+      connectionRef.current.destroy();
     }
-    connectionRef.current.destroy();
-  }
+    if (stream) stream.getTracks().forEach(track => track.stop());
+    setStream(null);
+    setPeerStream(null);
+    setCallAccepted(false);
+    setIsCalling(false);
+    setReceivingCall(false);
+  };
 
-  if (stream) {
-    stream.getTracks().forEach(track => track.stop());
-  }
-  setStream(null);
-  setPeerStream(null);
-  setCallAccepted(false);
-  setIsCalling(false);
-  setReceivingCall(false);
-};
-
-   const otherUser = selectedChat?.members.find(m => m.id !== userId);
+  const otherUser = selectedChat?.members.find(m => m.id !== userId);
 
   return (
     <div>
@@ -145,7 +178,7 @@ const leaveCall = () => {
         <div className="chat-list">
           {chats.map(chat => (
             <div key={chat.id} className={`chat-item ${selectedChat?.id === chat.id ? 'selected' : ''}`} onClick={() => handleSelectChat(chat)}>
-              <h3>{chat.name || `Чат #${chat.id}`}</h3>
+              <h3>{chat.name || chat.members.find(m => m.id !== userId)?.username || 'Чат'}</h3>
             </div>
           ))}
         </div>
@@ -153,7 +186,7 @@ const leaveCall = () => {
           {selectedChat ? (
             <>
               <div className="chat-header">
-                <h2>{selectedChat.name || `Чат #${selectedChat.id}`}</h2>
+                <h2>{selectedChat.name || otherUser?.username || 'Чат'}</h2>
                 {selectedChat.type === 'private' && otherUser && !isCalling && !callAccepted && !receivingCall && (
                   <button onClick={() => callUser(otherUser.id)}>📞 Позвонить</button>
                 )}
