@@ -14,9 +14,13 @@ const peerConfig = {
       urls: 'stun:stun.l.google.com:19302'
     },
     {
-      urls: 'turn:global.turn.twilio.com:3478?transport=udp',
-      username: import.meta.env.VITE_TWILIO_SID,
-      username: import.meta.env.VITE_TWILIO_TOKEN,
+      urls: [
+        'turn:openrelay.metered.ca:80',
+        'turn:openrelay.metered.ca:443',
+        'turn:openrelay.metered.ca:443?transport=tcp'
+      ],
+      username: import.meta.env.VITE_TURN_USERNAME,
+      credential: import.meta.env.VITE_TURN_CREDENTIAL
     }
   ]
 };
