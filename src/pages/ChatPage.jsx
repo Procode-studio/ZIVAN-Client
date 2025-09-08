@@ -6,17 +6,20 @@ import CreateChatModal from '../components/CreateChatModal.jsx';
 import CallUI from '../components/CallUI.jsx';
 import MinimizedCallView from '../components/MinimizedCallView.jsx';
 import Avatar from '../components/Avatar.jsx';
+import useCallHandler from '../hooks/useCallHandler'; // New hook
 import './ChatPage.css';
 
 const peerConfig = {
   iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
     {
-      urls: 'stun:stun.l.google.com:19302'
-    },
-    {
-      urls: 'turn:global.turn.twilio.com:3478?transport=udp',
-      username: import.meta.env.VITE_TWILIO_SID,
-      username: import.meta.env.VITE_TWILIO_TOKEN,
+      urls: [
+        'turn:openrelay.metered.ca:80',
+        'turn:openrelay.metered.ca:443',
+        'turn:openrelay.metered.ca:443?transport=tcp'
+      ],
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
     }
   ]
 };
@@ -27,122 +30,80 @@ function ChatPage({ userId }) {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
-  
-  const [stream, setStream] = useState(null);
-  const [peerStream, setPeerStream] = useState(null);
-  const [receivingCall, setReceivingCall] = useState(false);
-  const [callerInfo, setCallerInfo] = useState({ from: null, signal: null, fromName: '' });
-  const [callAccepted, setCallAccepted] = useState(false);
-  const [isCalling, setIsCalling] = useState(false);
-  const [isCallMinimized, setIsCallMinimized] = useState(false);
-
   const [onlineUsers, setOnlineUsers] = useState(new Set());
   const [typingUsers, setTypingUsers] = useState({});
+  const [loadingChats, setLoadingChats] = useState(true);
+  const [loadingMessages, setLoadingMessages] = useState(false);
   
-  const connectionRef = useRef();
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   
-  const peerAudioRef = useRef();
-
-  const handleNewMessage = useCallback((message) => {
-    if (selectedChat && message.chat_id === selectedChat.id) {
-      setMessages((prev) => [...prev, message]);
-    }
-  }, [selectedChat]);
-
-  const handleUserTyping = useCallback(({ userId, chatId }) => {
-    if (selectedChat?.id === chatId) {
-      setTypingUsers(prev => ({ ...prev, [userId]: true }));
-    }
-  }, [selectedChat]);
-
-  const handleUserStoppedTyping = useCallback(({ userId, chatId }) => {
-    if (selectedChat?.id === chatId) {
-      setTypingUsers(prev => {
-        const newTypingUsers = { ...prev };
-        delete newTypingUsers[userId];
-        return newTypingUsers;
-      });
-    }
-  }, [selectedChat]);
-
-  const { joinRoom, sendMessage, startTyping, stopTyping, socket } = useSocket(
+  const { socket, joinRoom, sendMessage, startTyping, stopTyping } = useSocket(
     import.meta.env.VITE_API_URL,
-    handleNewMessage,
-    handleUserTyping,
-    handleUserStoppedTyping
+    useCallback((message) => {
+      if (selectedChat && message.chat_id === selectedChat.id) {
+        setMessages((prev) => [...prev, message]);
+      }
+    }, [selectedChat]),
+    useCallback(({ userId, chatId }) => {
+      if (selectedChat?.id === chatId) {
+        setTypingUsers(prev => ({ ...prev, [userId]: true }));
+      }
+    }, [selectedChat]),
+    useCallback(({ userId, chatId }) => {
+      if (selectedChat?.id === chatId) {
+        setTypingUsers(prev => {
+          const newTypingUsers = { ...prev };
+          delete newTypingUsers[userId];
+          return newTypingUsers;
+        });
+      }
+    }, [selectedChat])
   );
 
-  const leaveCall = useCallback(() => {
-    if (connectionRef.current) {
-      const otherUserInCall = selectedChat?.members.find(m => m.id !== userId) || { id: callerInfo.from };
-      if (otherUserInCall.id) {
-        socket.emit("endCall", { to: otherUserInCall.id });
-      }
-      connectionRef.current.destroy();
-    }
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop());
-    }
-    setStream(null);
-    setPeerStream(null);
-    setCallAccepted(false);
-    setIsCalling(false);
-    setReceivingCall(false);
-    setIsCallMinimized(false);
-    setCallerInfo({ from: null, signal: null, fromName: '' });
-    connectionRef.current = null;
-  }, [socket, stream, selectedChat, userId, callerInfo.from]);
+  const {
+    stream,
+    peerStream,
+    receivingCall,
+    callerInfo,
+    callAccepted,
+    isCalling,
+    isCallMinimized,
+    leaveCall,
+    callUser,
+    answerCall,
+    setReceivingCall,
+    setIsCallMinimized
+  } = useCallHandler(socket, selectedChat, userId, chats, peerConfig);
 
   useEffect(() => {
     if (socket) {
-      socket.on("hey", (data) => {
-        const chatWithCaller = chats.find(chat => chat.members.some(m => m.id === data.from));
-        const callerName = chatWithCaller?.members.find(m => m.id === data.from)?.username || 'Unknown';
-        setCallerInfo({ from: data.from, signal: data.signal, fromName: callerName });
-        setReceivingCall(true);
-      });
-      socket.on("callAccepted", (signal) => {
-        setIsCalling(false);
-        setCallAccepted(true);
-        if (connectionRef.current) {
-          connectionRef.current.signal(signal);
-        }
-      });
-      socket.on("iceCandidate", (candidate) => {
-        if (connectionRef.current) {
-          connectionRef.current.signal(candidate);
-        }
-      });
-      socket.on("callEnded", leaveCall);
       socket.on('updateOnlineUsers', (users) => setOnlineUsers(new Set(users)));
     }
     return () => {
-      if (socket) {
-        socket.off("hey");
-        socket.off("callAccepted");
-        socket.off("iceCandidate");
-        socket.off("callEnded");
-        socket.off('updateOnlineUsers');
-      }
+      if (socket) socket.off('updateOnlineUsers');
     };
-  }, [socket, chats, leaveCall]);
+  }, [socket]);
 
-  useEffect(() => { getChats().then(setChats); }, []);
-  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
-  
   useEffect(() => {
-    if (peerStream && peerAudioRef.current) {
-      peerAudioRef.current.srcObject = peerStream;
-    }
-  }, [peerStream]);
+    const fetchChats = async () => {
+      setLoadingChats(true);
+      const fetchedChats = await getChats();
+      setChats(fetchedChats);
+      setLoadingChats(false);
+    };
+    fetchChats();
+  }, []);
+
+  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
   const handleSelectChat = async (chat) => {
     setSelectedChat(chat);
+    setLoadingMessages(true);
     setMessages([]);
     const chatMessages = await getMessages(chat.id);
     setMessages(chatMessages);
+    setLoadingMessages(false);
     joinRoom(chat.id);
   };
 
@@ -156,88 +117,22 @@ function ChatPage({ userId }) {
 
   const handleTyping = (e) => {
     setNewMessage(e.target.value);
-    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    else startTyping(selectedChat.id);
-    typingTimeoutRef.current = setTimeout(() => {
-      stopTyping(selectedChat.id);
-      typingTimeoutRef.current = null;
-    }, 2000);
-  };
-
-  const startStream = async (cameraOn = false) => {
-    try {
-      const currentStream = await navigator.mediaDevices.getUserMedia({ video: cameraOn, audio: true });
-      setStream(currentStream);
-      return currentStream;
-    } catch (err) {
-      alert("Не удалось получить доступ к микрофону/камере.");
-      return null;
+    if (selectedChat) {
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      else startTyping(selectedChat.id);
+      typingTimeoutRef.current = setTimeout(() => {
+        stopTyping(selectedChat.id);
+        typingTimeoutRef.current = null;
+      }, 3000);
     }
   };
-  
-  const createPeer = (initiator, currentStream) => {
-    const peer = new Peer({
-      initiator,
-      stream: currentStream,
-      config: peerConfig,
-    });
-
-    peer.on("stream", (stream) => setPeerStream(stream));
-    peer.on("close", leaveCall);
-    peer.on("error", (err) => {
-      console.error("Peer connection error:", err);
-      leaveCall();
-    });
-
-    return peer;
-  };
-
- const callUser = (idToCall) => {
-    navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(currentStream => {
-      setStream(currentStream);
-      setIsCalling(true);
-
-      const peer = createPeer(true, currentStream);
-      connectionRef.current = peer;
-
-      peer.on("signal", (data) => {
-        if (data.type === 'offer') {
-          socket.emit("callUser", { userToCall: idToCall, signalData: data, from: userId });
-        } else if (data.candidate) {
-          socket.emit("iceCandidate", { to: idToCall, candidate: data });
-        }
-      });
-    }).catch(err => alert("Не удалось получить доступ к медиа."));
-  };
-
-  const answerCall = () => {
-    navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(currentStream => {
-      setStream(currentStream);
-      setCallAccepted(true);
-      setReceivingCall(false);
-
-      const peer = createPeer(false, currentStream);
-      connectionRef.current = peer;
-
-      peer.on("signal", (data) => {
-        if (data.type === 'answer') {
-          socket.emit("acceptCall", { signal: data, to: callerInfo.from });
-        } else if (data.candidate) {
-          socket.emit("iceCandidate", { to: callerInfo.from, candidate: data });
-        }
-      });
-
-      peer.signal(callerInfo.signal);
-    }).catch(err => alert("Не удалось получить доступ к медиа."));
-  };
-
 
   const otherUser = selectedChat?.members.find(m => m.id !== userId);
   const isOtherUserOnline = otherUser ? onlineUsers.has(otherUser.id) : false;
   const isOtherUserTyping = otherUser ? typingUsers[otherUser.id] : false;
 
   return (
-    <div>
+    <div className="chat-page">
       {callAccepted && (
         <CallUI 
           stream={stream} 
@@ -250,23 +145,31 @@ function ChatPage({ userId }) {
         />
       )}
       
-      <h1>ZIVAN <button onClick={() => { localStorage.removeItem('token'); window.location.href = '/login'; }}>Выйти</button></h1>
-      <button onClick={() => setIsModalOpen(true)}>+ Новый чат</button>
+      <header className="chat-header-global">
+        <h1>ZIVAN</h1>
+        <button onClick={() => { localStorage.removeItem('token'); window.location.href = '/login'; }}>Выйти</button>
+      </header>
+      
+      <button className="new-chat-btn" onClick={() => setIsModalOpen(true)}>+ Новый чат</button>
       {isModalOpen && <CreateChatModal onClose={() => setIsModalOpen(false)} onChatCreated={() => getChats().then(setChats)} />}
       
       <div className="chat-container">
-        <div className="chat-list">
-          {chats.map(chat => (
-            <div 
-              key={chat.id} 
-              className={`chat-item ${selectedChat?.id === chat.id ? 'selected' : ''}`} 
-              onClick={() => handleSelectChat(chat)}
-            >
-              <h3>{chat.name || chat.members.find(m => m.id !== userId)?.username || 'Чат'}</h3>
-            </div>
-          ))}
-        </div>
-        <div className="message-view">
+        <aside className="chat-list">
+          {loadingChats ? (
+            <p>Загрузка чатов...</p>
+          ) : (
+            chats.map(chat => (
+              <div 
+                key={chat.id} 
+                className={`chat-item ${selectedChat?.id === chat.id ? 'selected' : ''}`} 
+                onClick={() => handleSelectChat(chat)}
+              >
+                <h3>{chat.name || chat.members.find(m => m.id !== userId)?.username || 'Чат'}</h3>
+              </div>
+            ))
+          )}
+        </aside>
+        <main className="message-view">
           {callAccepted && isCallMinimized && (
             <MinimizedCallView 
               peerName={otherUser?.username || callerInfo.fromName} 
@@ -276,7 +179,7 @@ function ChatPage({ userId }) {
           )}
           {selectedChat ? (
             <>
-              <div className="chat-header">
+              <header className="chat-header">
                 <Avatar username={otherUser?.username} size={40} />
                 <div className="chat-header-info">
                   <h2>{selectedChat.name || otherUser?.username || 'Чат'}</h2>
@@ -286,21 +189,28 @@ function ChatPage({ userId }) {
                   {selectedChat.type === 'private' && otherUser && !isCalling && !callAccepted && !receivingCall && (
                     <button onClick={() => callUser(otherUser.id)} disabled={!isOtherUserOnline} className="call-btn">📞</button>
                   )}
-                  {isCalling && <p><i>Вызов...</i></p>}
+                  {isCalling && <p className="calling-status"><i>Вызов...</i></p>}
                 </div>
-              </div>
+              </header>
               <div className="messages-list">
-                {messages.map(msg => {
-                  const isOwnMessage = msg.sender_id === userId;
-                  return (
-                    <div key={msg.id} className={`message-row ${isOwnMessage ? 'own' : 'other'}`}>
-                      <div className="message"><p>{msg.content}</p><small>{new Date(msg.timestamp).toLocaleTimeString()}</small></div>
-                    </div>
-                  );
-                })}
+                {loadingMessages ? (
+                  <p>Загрузка сообщений...</p>
+                ) : (
+                  messages.map(msg => {
+                    const isOwnMessage = msg.sender_id === userId;
+                    return (
+                      <div key={msg.id} className={`message-row ${isOwnMessage ? 'own' : 'other'}`}>
+                        <div className="message">
+                          <p>{msg.content}</p>
+                          <small>{new Date(msg.timestamp).toLocaleTimeString()}</small>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
                 <div ref={messagesEndRef} />
               </div>
-              <form onSubmit={handleSendMessage}>
+              <form className="message-form" onSubmit={handleSendMessage}>
                 <input 
                   type="text" 
                   placeholder="Введите сообщение..." 
@@ -313,7 +223,7 @@ function ChatPage({ userId }) {
           ) : (
             <p className="select-chat-prompt">Выберите чат, чтобы начать общение.</p>
           )}
-        </div>
+        </main>
       </div>
 
       {receivingCall && !callAccepted && (
