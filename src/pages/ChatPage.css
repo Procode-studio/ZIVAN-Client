@@ -1,3 +1,6 @@
+/* Updated ChatPage.css */
+/* Enhanced responsiveness: Adjusted heights, widths, paddings for mobile. Added viewport considerations. */
+
 :root {
   --primary: #007bff;
   --bg: #f8f9fa;
@@ -13,19 +16,22 @@
 .chat-page {
   background: var(--bg);
   min-height: 100vh;
-  padding: 20px;
+  padding: 10px;
   font-family: 'Segoe UI', sans-serif;
+  box-sizing: border-box;
 }
 
 .chat-header-global {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  margin-bottom: 10px;
+  padding: 0 10px;
 }
 
 .chat-header-global h1 {
   margin: 0;
+  font-size: 1.5em;
   color: var(--primary);
 }
 
@@ -33,15 +39,19 @@
   background: var(--primary);
   color: white;
   border: none;
-  padding: 10px 20px;
+  padding: 8px 16px;
   border-radius: 5px;
   cursor: pointer;
-  margin-bottom: 20px;
+  margin-bottom: 10px;
+  width: 100%;
+  max-width: 200px;
+  align-self: center;
 }
 
 .chat-container {
   display: flex;
-  height: 70vh;
+  flex-direction: row;
+  height: calc(100vh - 150px); /* Adjust for header/footer */
   border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
@@ -50,16 +60,18 @@
 
 .chat-list {
   width: 30%;
+  min-width: 200px;
   border-right: 1px solid var(--border);
   overflow-y: auto;
   background: white;
 }
 
 .chat-item {
-  padding: 15px;
+  padding: 10px 15px;
   border-bottom: 1px solid var(--border);
   cursor: pointer;
   transition: background 0.2s;
+  font-size: 1em;
 }
 
 .chat-item:hover {
@@ -71,59 +83,54 @@
 }
 
 .message-view {
-  width: 70%;
+  flex: 1;
   display: flex;
   flex-direction: column;
-  padding: 20px;
+  padding: 10px;
   background: white;
+  overflow: hidden;
 }
 
 .chat-header {
   display: flex;
   align-items: center;
-  padding-bottom: 15px;
+  padding-bottom: 10px;
   border-bottom: 1px solid var(--border);
-  margin-bottom: 20px;
+  margin-bottom: 10px;
 }
 
 .chat-header-info {
-  margin-left: 15px;
+  margin-left: 10px;
+  flex: 1;
 }
 
 .chat-header-info h2 {
   margin: 0;
-  font-size: 1.2em;
+  font-size: 1.1em;
 }
 
 .chat-header-info .status {
   margin: 0;
-  font-size: 0.9em;
+  font-size: 0.8em;
   color: var(--secondary-text);
 }
 
 .chat-header-actions {
-  margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 5px;
 }
 
 .call-btn {
   background: none;
   border: none;
-  font-size: 1.8em;
+  font-size: 1.5em;
   cursor: pointer;
   color: var(--primary);
 }
 
 .call-btn:disabled {
   opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.calling-status {
-  font-style: italic;
-  color: var(--secondary-text);
 }
 
 .messages-list {
@@ -131,11 +138,13 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
+  padding-right: 5px;
 }
 
 .message-row {
   display: flex;
+  max-width: 100%;
 }
 
 .message-row.own {
@@ -147,10 +156,12 @@
 }
 
 .message {
-  padding: 10px 15px;
-  border-radius: 20px;
-  max-width: 70%;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  padding: 8px 12px;
+  border-radius: 15px;
+  max-width: 80%;
+  word-wrap: break-word;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+  font-size: 0.95em;
 }
 
 .message-row.own .message {
@@ -164,11 +175,11 @@
 }
 
 .message p {
-  margin: 0 0 5px;
+  margin: 0 0 3px;
 }
 
 .message small {
-  font-size: 0.75em;
+  font-size: 0.7em;
   opacity: 0.7;
   display: block;
   text-align: right;
@@ -176,51 +187,57 @@
 
 .message-form {
   display: flex;
-  margin-top: 20px;
+  margin-top: 10px;
 }
 
 .message-form input {
   flex-grow: 1;
-  padding: 10px;
+  padding: 8px;
   border: 1px solid var(--border);
   border-radius: 5px 0 0 5px;
+  font-size: 0.95em;
 }
 
 .message-form button {
-  padding: 10px 20px;
+  padding: 8px 15px;
   background: var(--primary);
   color: white;
   border: none;
   border-radius: 0 5px 5px 0;
   cursor: pointer;
+  font-size: 0.95em;
 }
 
 .select-chat-prompt {
   margin: auto;
   color: var(--secondary-text);
-  font-size: 1.2em;
+  font-size: 1em;
+  text-align: center;
 }
 
 .caller-notification {
   position: fixed;
-  top: 20px;
-  right: 20px;
-  padding: 20px;
+  top: 10%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 15px;
   background: white;
   border: 1px solid var(--border);
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.15);
   z-index: 100;
   text-align: center;
+  width: 90%;
+  max-width: 300px;
 }
 
 .control-btn {
-  padding: 10px 20px;
-  margin: 10px;
+  padding: 8px 15px;
+  margin: 5px;
   border: none;
   border-radius: 5px;
   cursor: pointer;
-  font-size: 1.2em;
+  font-size: 1.1em;
 }
 
 .control-btn.hang-up {
@@ -228,19 +245,94 @@
   color: white;
 }
 
+/* Responsive adjustments */
 @media (max-width: 768px) {
+  .chat-page {
+    padding: 5px;
+  }
+
   .chat-container {
     flex-direction: column;
-    height: auto;
+    height: calc(100vh - 100px);
   }
-  
+
   .chat-list {
     width: 100%;
-    height: 30vh;
+    height: 30%;
+    min-width: auto;
   }
-  
+
   .message-view {
-    width: 100%;
-    height: 60vh;
+    height: 70%;
+    padding: 5px;
+  }
+
+  .chat-header-global h1 {
+    font-size: 1.2em;
+  }
+
+  .new-chat-btn {
+    padding: 6px 12px;
+    font-size: 0.9em;
+  }
+
+  .chat-item {
+    padding: 8px 10px;
+    font-size: 0.9em;
+  }
+
+  .chat-header {
+    padding-bottom: 8px;
+  }
+
+  .chat-header-info h2 {
+    font-size: 1em;
+  }
+
+  .chat-header-info .status {
+    font-size: 0.75em;
+  }
+
+  .call-btn {
+    font-size: 1.3em;
+  }
+
+  .messages-list {
+    gap: 5px;
+  }
+
+  .message {
+    padding: 6px 10px;
+    font-size: 0.85em;
+    max-width: 90%;
+  }
+
+  .message small {
+    font-size: 0.65em;
+  }
+
+  .message-form input {
+    padding: 6px;
+    font-size: 0.85em;
+  }
+
+  .message-form button {
+    padding: 6px 10px;
+    font-size: 0.85em;
+  }
+
+  .select-chat-prompt {
+    font-size: 0.9em;
+  }
+}
+
+@media (max-width: 480px) {
+  .chat-header-actions {
+    gap: 3px;
+  }
+
+  .caller-notification {
+    top: 20%;
+    width: 95%;
   }
 }

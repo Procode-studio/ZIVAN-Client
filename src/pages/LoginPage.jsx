@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { login, register } from '../api/authApi';
+import './LoginPage.css';
 
 function LoginPage() {
   const [username, setUsername] = useState('');
@@ -7,18 +8,19 @@ function LoginPage() {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
-const handleLogin = async (e) => {
-  e.preventDefault();
-  setError('');
-  setMessage('');
-  try {
-    const data = await login(username, password);
-    localStorage.setItem('token', data.token);
-    window.location.href = '/chat';
-  } catch (err) {
-    setError(err.response?.data?.message || 'Произошла ошибка при входе');
-  }
-};
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setError('');
+    setMessage('');
+    try {
+      const data = await login(username, password);
+      localStorage.setItem('token', data.token);
+      window.location.href = '/chat';
+    } catch (err) {
+      setError(err.response?.data?.message || 'Произошла ошибка при входе');
+    }
+  };
+
   const handleRegister = async (e) => {
     e.preventDefault();
     setError('');
@@ -32,30 +34,36 @@ const handleLogin = async (e) => {
   };
 
   return (
-    <div>
+    <div className="login-container">
       <h1>Вход или Регистрация</h1>
-      <form>
-        <div>
-          <label>Имя пользователя:</label>
+      <form className="login-form">
+        <div className="form-group">
+          <label htmlFor="username">Имя пользователя:</label>
           <input
+            id="username"
             type="text"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
+            required
           />
         </div>
-        <div>
-          <label>Пароль:</label>
+        <div className="form-group">
+          <label htmlFor="password">Пароль:</label>
           <input
+            id="password"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            required
           />
         </div>
-        <button onClick={handleLogin}>Войти</button>
-        <button onClick={handleRegister}>Регистрация</button>
+        <div className="form-actions">
+          <button type="button" onClick={handleLogin}>Войти</button>
+          <button type="button" onClick={handleRegister}>Регистрация</button>
+        </div>
       </form>
-      {error && <p style={{ color: 'red' }}>{error}</p>}
-      {message && <p style={{ color: 'green' }}>{message}</p>}
+      {error && <p className="error">{error}</p>}
+      {message && <p className="success">{message}</p>}
     </div>
   );
 }
