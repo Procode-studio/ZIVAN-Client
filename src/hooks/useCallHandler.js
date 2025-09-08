@@ -9,14 +9,17 @@ export default function useCallHandler(socket, selectedChat, userId, chats, peer
   const [callAccepted, setCallAccepted] = useState(false);
   const [isCalling, setIsCalling] = useState(false);
   const [isCallMinimized, setIsCallMinimized] = useState(false);
+  const [isMicOn, setIsMicOn] = useState(true);
+  const [isCameraOn, setIsCameraOn] = useState(false); // Camera off by default
+  const [peerCameraOn, setPeerCameraOn] = useState(true);
+  const [peerId, setPeerId] = useState(null);
 
   const connectionRef = useRef();
 
   const leaveCall = useCallback(() => {
     if (connectionRef.current) {
-      const otherUserInCall = selectedChat?.members.find(m => m.id !== userId) || { id: callerInfo.from };
-      if (otherUserInCall.id) {
-        socket.emit("endCall", { to: otherUserInCall.id });
+      if (peerId) {
+        socket.emit("endCall", { to: peerId });
       }
       connectionRef.current.destroy();
     }
@@ -30,8 +33,11 @@ export default function useCallHandler(socket, selectedChat, userId, chats, peer
     setReceivingCall(false);
     setIsCallMinimized(false);
     setCallerInfo({ from: null, signal: null, fromName: '' });
+    setPeerId(null);
+    setIsCameraOn(false);
+    setPeerCameraOn(true);
     connectionRef.current = null;
-  }, [socket, stream, selectedChat, userId, callerInfo.from]);
+  }, [socket, stream, peerId]);
 
   useEffect(() => {
     if (!socket) return;
@@ -55,12 +61,14 @@ export default function useCallHandler(socket, selectedChat, userId, chats, peer
       }
     });
     socket.on("callEnded", leaveCall);
+    socket.on("cameraToggled", ({ enabled }) => setPeerCameraOn(enabled));
 
     return () => {
       socket.off("hey");
       socket.off("callAccepted");
       socket.off("iceCandidate");
       socket.off("callEnded");
+      socket.off("cameraToggled");
     };
   }, [socket, chats, leaveCall]);
 
@@ -99,6 +107,12 @@ export default function useCallHandler(socket, selectedChat, userId, chats, peer
 
     setStream(currentStream);
     setIsCalling(true);
+    setPeerId(idToCall);
+
+    // Apply initial camera state (off)
+    if (currentStream.getVideoTracks().length) {
+      currentStream.getVideoTracks()[0].enabled = false;
+    }
 
     const peer = createPeer(true, currentStream);
     connectionRef.current = peer;
@@ -119,6 +133,12 @@ export default function useCallHandler(socket, selectedChat, userId, chats, peer
     setStream(currentStream);
     setCallAccepted(true);
     setReceivingCall(false);
+    setPeerId(callerInfo.from);
+
+    // Apply initial camera state (off)
+    if (currentStream.getVideoTracks().length) {
+      currentStream.getVideoTracks()[0].enabled = false;
+    }
 
     const peer = createPeer(false, currentStream);
     connectionRef.current = peer;
@@ -134,6 +154,26 @@ export default function useCallHandler(socket, selectedChat, userId, chats, peer
     peer.signal(callerInfo.signal);
   };
 
+  const toggleMic = () => {
+    const newEnabled = !isMicOn;
+    setIsMicOn(newEnabled);
+    if (stream?.getAudioTracks().length) {
+      stream.getAudioTracks()[0].enabled = newEnabled;
+    }
+    // Optionally emit for peer to know, but not necessary for UI
+  };
+
+  const toggleCamera = () => {
+    const newEnabled = !isCameraOn;
+    setIsCameraOn(newEnabled);
+    if (stream?.getVideoTracks().length) {
+      stream.getVideoTracks()[0].enabled = newEnabled;
+    }
+    if (peerId) {
+      socket.emit("cameraToggled", { to: peerId, enabled: newEnabled });
+    }
+  };
+
   return {
     stream,
     peerStream,
@@ -146,6 +186,11 @@ export default function useCallHandler(socket, selectedChat, userId, chats, peer
     callUser,
     answerCall,
     setReceivingCall,
-    setIsCallMinimized
+    setIsCallMinimized,
+    isMicOn,
+    isCameraOn,
+    peerCameraOn,
+    toggleMic,
+    toggleCamera
   };
 }

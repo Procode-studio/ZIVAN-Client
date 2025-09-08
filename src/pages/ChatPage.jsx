@@ -73,7 +73,12 @@ function ChatPage({ userId }) {
     callUser,
     answerCall,
     setReceivingCall,
-    setIsCallMinimized
+    setIsCallMinimized,
+	isMicOn,
+    isCameraOn,
+    peerCameraOn,
+    toggleMic,
+    toggleCamera
   } = useCallHandler(socket, selectedChat, userId, chats, peerConfig);
 
   useEffect(() => {
@@ -142,6 +147,11 @@ function ChatPage({ userId }) {
           onMinimize={() => setIsCallMinimized(true)}
           isCalling={isCalling}
           isMinimized={isCallMinimized}
+		  isMicOn={isMicOn}
+		  isCameraOn={isCameraOn}
+		  peerCameraOn={peerCameraOn}
+		  toggleMic={toggleMic}
+		  toggleCamera={toggleCamera}
         />
       )}
       

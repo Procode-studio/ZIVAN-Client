@@ -2,9 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import Avatar from './Avatar.jsx';
 import './CallUI.css';
 
-function CallUI({ stream, peerStream, onLeaveCall, peerName, onMinimize, isCalling, isMinimized }) {
-  const [isMicOn, setIsMicOn] = useState(true);
-  const [isCameraOn, setIsCameraOn] = useState(true);
+function CallUI({ stream, peerStream, onLeaveCall, peerName, onMinimize, isCalling, isMinimized, isMicOn, isCameraOn, peerCameraOn, toggleMic, toggleCamera }) {
+  const [callDuration, setCallDuration] = useState(0);
   const myVideo = useRef();
   const userVideo = useRef();
 
@@ -19,27 +18,18 @@ function CallUI({ stream, peerStream, onLeaveCall, peerName, onMinimize, isCalli
       userVideo.current.srcObject = peerStream;
     }
   }, [peerStream]);
-  
+
   useEffect(() => {
-    const timer = isCalling ? null : setInterval(() => setCallDuration(prev => prev + 1), 1000);
-    return () => clearInterval(timer);
+    let interval;
+    if (!isCalling) {
+      interval = setInterval(() => setCallDuration(prev => prev + 1), 1000);
+    }
+    return () => clearInterval(interval);
   }, [isCalling]);
 
-  const [callDuration, setCallDuration] = useState(0);
-  const formatDuration = (s) => new Date(s * 1000).toISOString().substr(14, 5);
-
-  const toggleMic = () => {
-    if (stream) {
-      stream.getAudioTracks()[0].enabled = !isMicOn;
-      setIsMicOn(!isMicOn);
-    }
-  };
-
-  const toggleCamera = () => {
-    if (stream) {
-      stream.getVideoTracks()[0].enabled = !isCameraOn;
-      setIsCameraOn(!isCameraOn);
-    }
+  const formatDuration = (s) => {
+    const date = new Date(s * 1000);
+    return date.toISOString().substr(14, 5);
   };
 
   return (
@@ -49,8 +39,8 @@ function CallUI({ stream, peerStream, onLeaveCall, peerName, onMinimize, isCalli
         <p>{isCalling ? 'Вызов...' : formatDuration(callDuration)}</p>
       </div>
       <div className="call-videos">
-        <video className="user-video" ref={userVideo} autoPlay playsInline style={{ display: peerStream ? 'block' : 'none' }} />
-        {!peerStream && <div className="user-avatar-large"><Avatar username={peerName} size={150} /></div>}
+        <video className="user-video" ref={userVideo} autoPlay playsInline style={{ display: peerStream && peerCameraOn ? 'block' : 'none' }} />
+        {(!peerStream || !peerCameraOn) && <div className="user-avatar-large"><Avatar username={peerName} size={150} /></div>}
         <div className="my-video-container">
           <video className="my-video" ref={myVideo} autoPlay playsInline muted style={{ display: stream && isCameraOn ? 'block' : 'none' }} />
           {(!stream || !isCameraOn) && <div className="my-video"><Avatar username="You" size={100} /></div>}
