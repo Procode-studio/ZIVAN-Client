@@ -73,6 +73,11 @@ export default function useCallHandler(socket, selectedChat, userId, chats, peer
   }, [socket, chats, leaveCall]);
 
   const createPeer = (initiator, currentStream) => {
+    if (!peerConfig || !Array.isArray(peerConfig.iceServers) || peerConfig.iceServers.length === 0) {
+      console.warn('[WebRTC] ICE config not ready. Aborting peer creation.', peerConfig);
+      alert('Подключение к звонку еще настраивается. Попробуйте снова через несколько секунд.');
+      return null;
+    }
     const peer = new Peer({
       initiator,
       trickle: true,
@@ -133,6 +138,10 @@ export default function useCallHandler(socket, selectedChat, userId, chats, peer
     }
 
     const peer = createPeer(true, currentStream);
+    if (!peer) {
+      setIsCalling(false);
+      return;
+    }
     connectionRef.current = peer;
 
     peer.on("signal", (data) => {
@@ -159,6 +168,7 @@ export default function useCallHandler(socket, selectedChat, userId, chats, peer
     }
 
     const peer = createPeer(false, currentStream);
+    if (!peer) return;
     connectionRef.current = peer;
 
     peer.on("signal", (data) => {
