@@ -80,7 +80,7 @@ export default function useCallHandler(socket, selectedChat, userId, chats, peer
     }
     const peer = new Peer({
       initiator,
-      trickle: true,
+      trickle: false,
       stream: currentStream,
       config: peerConfig
     });

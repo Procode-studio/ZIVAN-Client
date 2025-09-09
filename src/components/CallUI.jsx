@@ -10,12 +10,21 @@ function CallUI({ stream, peerStream, onLeaveCall, peerName, onMinimize, isCalli
   useEffect(() => {
     if (stream && myVideo.current) {
       myVideo.current.srcObject = stream;
+      // Try to start playback explicitly (some browsers block autoplay)
+      myVideo.current.play().catch(() => {
+        // ignore; user interaction (e.g., clicking buttons) will allow playback
+      });
     }
   }, [stream]);
 
   useEffect(() => {
     if (peerStream && userVideo.current) {
       userVideo.current.srcObject = peerStream;
+      // Explicitly attempt to play remote media
+      userVideo.current.play().catch(() => {
+        // If blocked by autoplay policy, UI interactions (accept/call) usually unblock it
+        // Optionally, we could show a hint here if needed
+      });
     }
   }, [peerStream]);
 
