@@ -80,6 +80,10 @@ export default function useCallHandler(socket, selectedChat, userId, chats, peer
       config: peerConfig
     });
 
+    // Additional diagnostics for ICE/connection states
+    peer.on("connect", () => {
+      console.log("[WebRTC] Data channel connected (peer connected)");
+    });
     peer.on("stream", setPeerStream);
     peer.on("close", leaveCall);
     peer.on("error", (err) => {
@@ -87,6 +91,20 @@ export default function useCallHandler(socket, selectedChat, userId, chats, peer
       alert("Ошибка соединения.");
       leaveCall();
     });
+
+    // Low-level RTCPeerConnection state logging (helps debug Connection failed)
+    const pc = peer._pc;
+    if (pc) {
+      pc.oniceconnectionstatechange = () => {
+        console.log("[WebRTC] ICE state:", pc.iceConnectionState);
+      };
+      pc.onconnectionstatechange = () => {
+        console.log("[WebRTC] Connection state:", pc.connectionState);
+      };
+      pc.onicegatheringstatechange = () => {
+        console.log("[WebRTC] ICE gathering state:", pc.iceGatheringState);
+      };
+    }
 
     return peer;
   };

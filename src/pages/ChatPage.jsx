@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import Peer from 'simple-peer';
 import { getChats, getMessages } from '../api/chatApi';
 import { useSocket } from '../hooks/useSocket';
 import CreateChatModal from '../components/CreateChatModal.jsx';
@@ -8,21 +7,6 @@ import MinimizedCallView from '../components/MinimizedCallView.jsx';
 import Avatar from '../components/Avatar.jsx';
 import useCallHandler from '../hooks/useCallHandler'; // New hook
 import './ChatPage.css';
-
-const peerConfig = {
-  iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    {
-      urls: [
-        'turn:openrelay.metered.ca:80',
-        'turn:openrelay.metered.ca:443',
-        'turn:openrelay.metered.ca:443?transport=tcp'
-      ],
-      username: 'openrelayproject',
-      credential: 'openrelayproject'
-	}
-  ]
-};
 
 function ChatPage({ userId }) {
   const [chats, setChats] = useState([]);
@@ -35,6 +19,24 @@ function ChatPage({ userId }) {
   const [loadingChats, setLoadingChats] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
   
+  const [iceConfig, setIceConfig] = useState({ iceServers: [] });
+  useEffect(() => {
+    const loadIce = async () => {
+      try {
+        const base = import.meta.env.VITE_API_URL;
+        if (!base) return; // fallback: leave empty config
+        const res = await fetch(`${base}/api/config/ice`);
+        if (res.ok) {
+          const cfg = await res.json();
+          setIceConfig(cfg);
+        }
+      } catch (e) {
+        console.error('Failed to load ICE config', e);
+      }
+    };
+    loadIce();
+  }, []);
+
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   
@@ -79,7 +81,7 @@ function ChatPage({ userId }) {
     peerCameraOn,
     toggleMic,
     toggleCamera
-  } = useCallHandler(socket, selectedChat, userId, chats, peerConfig);
+  } = useCallHandler(socket, selectedChat, userId, chats, iceConfig);
 
   useEffect(() => {
     if (socket) {
