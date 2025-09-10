@@ -6,7 +6,6 @@ import CallInterface from '../components/CallInterface.jsx';
 import CallNotification from '../components/CallNotification.jsx';
 import ChatHeader from '../components/ChatHeader.jsx';
 import MessageList from '../components/MessageList.jsx';
-import Avatar from '../components/Avatar.jsx';
 import { useSimpleCall } from '../hooks/useSimpleCall.js';
 import './ChatPage.css';
 
@@ -20,6 +19,7 @@ function ChatPage({ userId }) {
   const [typingUsers, setTypingUsers] = useState({});
   const [loadingChats, setLoadingChats] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
+  const [isMobileListOpen, setIsMobileListOpen] = useState(false);
 
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
@@ -73,6 +73,7 @@ function ChatPage({ userId }) {
 
   const handleSelectChat = async (chat) => {
     setSelectedChat(chat);
+    setIsMobileListOpen(false);
     setLoadingMessages(true);
     setMessages([]);
     const chatMessages = await getMessages(chat.id);
@@ -123,6 +124,7 @@ function ChatPage({ userId }) {
 
   return (
     <div className="chat-page">
+      {/* Mobile toggle button */}
       <CallInterface
         callAccepted={callAccepted}
         localStream={localStream}
@@ -133,11 +135,10 @@ function ChatPage({ userId }) {
         isCalling={isCalling}
         isMinimized={isCallMinimized}
         isConnected={isConnected}
-        isCallMinimized={isCallMinimized}
-        setIsCallMinimized={setIsCallMinimized}
       />
 
       <header className="chat-header-global">
+        <button className="toggle-chat-list" onClick={() => setIsMobileListOpen(v => !v)}>Чаты</button>
         <h1>ZIVAN</h1>
         <button onClick={() => { localStorage.removeItem('token'); window.location.href = '/login'; }}>Выйти</button>
       </header>
@@ -146,7 +147,7 @@ function ChatPage({ userId }) {
       {isModalOpen && <CreateChatModal onClose={() => setIsModalOpen(false)} onChatCreated={() => getChats().then(setChats)} />}
 
       <div className="chat-container">
-        <aside className="chat-list">
+        <aside className={`chat-list ${isMobileListOpen ? 'open' : ''}`}>
           {loadingChats ? (
             <p>Загрузка чатов...</p>
           ) : (
@@ -161,6 +162,7 @@ function ChatPage({ userId }) {
             ))
           )}
         </aside>
+        {isMobileListOpen && <div className="chat-list-overlay" onClick={() => setIsMobileListOpen(false)} />}
         <main className="message-view">
           <ChatHeader
             selectedChat={selectedChat}

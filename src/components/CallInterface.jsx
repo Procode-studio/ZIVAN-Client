@@ -2,7 +2,7 @@ import React, { useRef, useEffect } from 'react';
 import Avatar from './Avatar.jsx';
 import './CallUI.css';
 
-function CallInterface({ callAccepted, localStream, remoteStream, onLeaveCall, peerName, onMinimize, isCalling, isMinimized, isConnected, isCallMinimized, setIsCallMinimized }) {
+function CallInterface({ callAccepted, localStream, remoteStream, onLeaveCall, peerName, onMinimize, isCalling, isMinimized, isConnected }) {
   const myVideo = useRef();
   const userVideo = useRef();
 

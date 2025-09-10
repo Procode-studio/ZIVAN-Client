@@ -245,6 +245,20 @@
   color: white;
 }
 
+.toggle-chat-list {
+  display: none;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.chat-list-overlay {
+  display: none;
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
   .chat-page {
@@ -324,6 +338,45 @@
   .select-chat-prompt {
     font-size: 0.9em;
   }
+
+  .toggle-chat-list { display: inline-block; }
+}
+
+@media (max-width: 640px) {
+  .chat-container { position: relative; }
+
+  .chat-list {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    width: 80vw;
+    max-width: 320px;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    z-index: 1000;
+    box-shadow: 2px 0 12px rgba(0,0,0,0.2);
+  }
+  .chat-list.open { transform: translateX(0); }
+
+  .chat-list-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.35);
+    z-index: 999;
+  }
+
+  /* Keep message view full-screen behind the drawer */
+  .message-view { height: 100%; }
+
+  /* Button sizing in drawer context */
+  .new-chat-btn {
+    width: calc(100% - 20px);
+    margin: 10px;
+  }
+
+  .chat-header-global { gap: 8px; }
 }
 
 @media (max-width: 480px) {
