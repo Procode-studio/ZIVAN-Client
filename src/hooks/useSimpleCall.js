@@ -19,6 +19,8 @@ export const useSimpleCall = (socket, callerId, selfId, onCallReceived, onCallEn
   const statsIntervalRef = useRef(null);
   const audioSenderRef = useRef(null);
   const videoSenderRef = useRef(null);
+  const pendingCandidatesRef = useRef([]);
+  const remoteDescSetRef = useRef(false);
 
   useEffect(() => {
     const api = import.meta.env.VITE_API_URL;
@@ -79,7 +81,6 @@ export const useSimpleCall = (socket, callerId, selfId, onCallReceived, onCallEn
     peer.ontrack = (event) => {
       console.log('[RTC] ontrack received');
       setRemoteStream(event.streams[0]);
-      setIsConnected(true);
     };
 
     peer.onicecandidate = (event) => {
@@ -113,6 +114,17 @@ export const useSimpleCall = (socket, callerId, selfId, onCallReceived, onCallEn
     apply();
   }, [localStream]);
 
+  // Drain queued ICE candidates when remote description becomes set
+  const drainPendingCandidates = async () => {
+    if (!peerRef.current || !remoteDescSetRef.current) return;
+    const queue = pendingCandidatesRef.current;
+    pendingCandidatesRef.current = [];
+    for (const c of queue) {
+      try { await peerRef.current.addIceCandidate(c); } catch (e) { console.warn('addIceCandidate (queued) failed', e); }
+    }
+    console.log('[SIGNAL] drained queued ICE candidates:', queue.length);
+  };
+
   const startStatsLogging = () => {
     if (!peerRef.current) return;
     if (statsIntervalRef.current) clearInterval(statsIntervalRef.current);
@@ -122,6 +134,9 @@ export const useSimpleCall = (socket, callerId, selfId, onCallReceived, onCallEn
       if (!peerRef.current) return;
       const stats = await peerRef.current.getStats();
       let inAudio = 0, inVideo = 0, outAudio = 0, outVideo = 0;
+      let selectedPair = null;
+      const reports = {};
+      stats.forEach(r => { reports[r.id] = r; });
       stats.forEach(report => {
         if (report.type === 'inbound-rtp') {
           const kind = report.kind || report.mediaType;
@@ -133,8 +148,18 @@ export const useSimpleCall = (socket, callerId, selfId, onCallReceived, onCallEn
           if (kind === 'audio') outAudio = report.bytesSent || outAudio;
           if (kind === 'video') outVideo = report.bytesSent || outVideo;
         }
+        if (report.type === 'candidate-pair' && (report.nominated || report.selected) && report.state === 'succeeded') {
+          selectedPair = report;
+        }
       });
-      console.log(`[RTC][stats] inA=${inAudio} inV=${inVideo} outA=${outAudio} outV=${outVideo}`);
+      let pairInfo = '';
+      if (selectedPair) {
+        const local = reports[selectedPair.localCandidateId];
+        const remote = reports[selectedPair.remoteCandidateId];
+        pairInfo = ` pair(local=${local?.candidateType}/${local?.protocol}, remote=${remote?.candidateType}/${remote?.protocol})`;
+      }
+      const senders = peerRef.current.getSenders().map(s => ({ kind: s.track?.kind, enabled: s.track?.enabled, readyState: s.track?.readyState }));
+      console.log(`[RTC][stats] inA=${inAudio} inV=${inVideo} outA=${outAudio} outV=${outVideo}${pairInfo} senders=`, senders);
       if (count >= 10) {
         clearInterval(statsIntervalRef.current);
         statsIntervalRef.current = null;
@@ -148,6 +173,7 @@ export const useSimpleCall = (socket, callerId, selfId, onCallReceived, onCallEn
     if (!stream) return;
     const peer = await createPeer(true, stream, callerId);
     peerRef.current = peer;
+    remoteDescSetRef.current = false;
     startStatsLogging();
   };
 
@@ -160,6 +186,8 @@ export const useSimpleCall = (socket, callerId, selfId, onCallReceived, onCallEn
     const offerToUse = offer || incomingOfferRef.current;
     if (!offerToUse) return;
     await peer.setRemoteDescription(offerToUse);
+    remoteDescSetRef.current = true;
+    await drainPendingCandidates();
     const answerDesc = await peer.createAnswer();
     await peer.setLocalDescription(answerDesc);
     console.log('[SIGNAL] emit acceptCall ->', targetId);
@@ -176,6 +204,8 @@ export const useSimpleCall = (socket, callerId, selfId, onCallReceived, onCallEn
     }
     setIsConnected(false);
     setRemoteStream(null);
+    pendingCandidatesRef.current = [];
+    remoteDescSetRef.current = false;
   };
 
   const toggleMic = () => {
@@ -203,10 +233,17 @@ export const useSimpleCall = (socket, callerId, selfId, onCallReceived, onCallEn
     const handleCallAccepted = (signal) => {
       console.log('[SIGNAL] on callAccepted');
       peerRef.current?.setRemoteDescription(signal);
+      remoteDescSetRef.current = true;
+      drainPendingCandidates();
     };
     const handleIceCandidate = (candidate) => {
       console.log('[SIGNAL] on iceCandidate');
-      peerRef.current?.addIceCandidate(candidate);
+      if (!peerRef.current || !remoteDescSetRef.current) {
+        pendingCandidatesRef.current.push(candidate);
+        console.log('[SIGNAL] queued ICE candidate (peer not ready)');
+      } else {
+        peerRef.current.addIceCandidate(candidate).catch(err => console.warn('addIceCandidate failed', err));
+      }
     };
     const handleCallEnded = () => {
       console.log('[SIGNAL] on callEnded');
