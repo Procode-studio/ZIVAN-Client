@@ -5,7 +5,7 @@ import CreateChatModal from '../components/CreateChatModal.jsx';
 import CallUI from '../components/CallUI.jsx';
 import MinimizedCallView from '../components/MinimizedCallView.jsx';
 import Avatar from '../components/Avatar.jsx';
-import useCallHandler from '../hooks/useCallHandler'; 
+import useSimpleCall from '../hooks/useSimpleCall.js'; 
 import './ChatPage.css';
 
 function ChatPage({ userId }) {
