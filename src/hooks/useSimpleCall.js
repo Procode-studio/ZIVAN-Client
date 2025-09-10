@@ -17,10 +17,9 @@ export const useSimpleCall = (socket, callerId, selfId, onCallReceived, onCallEn
     ],
   });
   const statsIntervalRef = useRef(null);
-  const audioSenderRef = useRef(null);
-  const videoSenderRef = useRef(null);
   const pendingCandidatesRef = useRef([]);
   const remoteDescSetRef = useRef(false);
+  const zeroOutCounterRef = useRef(0);
 
   useEffect(() => {
     const api = import.meta.env.VITE_API_URL;
@@ -38,7 +37,6 @@ export const useSimpleCall = (socket, callerId, selfId, onCallReceived, onCallEn
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       setLocalStream(stream);
-      // Respect toggles
       if (!isMicOn && stream.getAudioTracks().length) stream.getAudioTracks()[0].enabled = false;
       if (!isCameraOn && stream.getVideoTracks().length) stream.getVideoTracks()[0].enabled = false;
       console.log('[RTC] getUserMedia -> tracks', {
@@ -52,7 +50,7 @@ export const useSimpleCall = (socket, callerId, selfId, onCallReceived, onCallEn
     }
   };
 
-  // Принудительно убеждаемся, что sender'ы отправляют: включаем encodings.active и заново привязываем дорожки
+  // Включаем отправку на всякий случай (активируем encodings)
   const ensureSending = async () => {
     if (!peerRef.current) return;
     const senders = peerRef.current.getSenders();
@@ -69,44 +67,48 @@ export const useSimpleCall = (socket, callerId, selfId, onCallReceived, onCallEn
         }
       } catch {}
     }
-    // повторная привязка локальных дорожек
-    const a = localStream?.getAudioTracks?.()[0] || null;
-    const v = localStream?.getVideoTracks?.()[0] || null;
-    try { await audioSenderRef.current?.replaceTrack(a); } catch {}
-    try { await videoSenderRef.current?.replaceTrack(v); } catch {}
     console.log('[RTC] ensureSending applied');
+  };
+
+  // Явный запуск повторной переговоры, если одна сторона не отправляет RTP
+  const triggerRenegotiate = async () => {
+    if (!peerRef.current) return;
+    const to = incomingFromRef.current || callerId;
+    try {
+      const offer = await peerRef.current.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
+      await peerRef.current.setLocalDescription(offer);
+      console.log('[SIGNAL] emit renegotiate ->', to);
+      socket.emit('renegotiate', { to, offer });
+    } catch (e) {
+      console.warn('renegotiate failed', e);
+    }
   };
 
   const createPeer = async (initiator, streamParam, toIdForCandidates) => {
     const peer = new RTCPeerConnection(rtcConfig);
 
-    // Create transceivers in sendrecv to ensure RTP setup across browsers
-    const audioTrans = peer.addTransceiver('audio', { direction: 'sendrecv' });
-    const videoTrans = peer.addTransceiver('video', { direction: 'sendrecv' });
-    audioSenderRef.current = audioTrans.sender;
-    videoSenderRef.current = videoTrans.sender;
-
     const streamToUse = streamParam || localStream;
     if (streamToUse) {
-      const a = streamToUse.getAudioTracks()[0] || null;
-      const v = streamToUse.getVideoTracks()[0] || null;
-      try { await audioSenderRef.current.replaceTrack(a); } catch {}
-      try { await videoSenderRef.current.replaceTrack(v); } catch {}
-      console.log('[RTC] replaceTrack attached', { hasA: !!a, hasV: !!v });
+      streamToUse.getTracks().forEach(track => {
+        try { peer.addTrack(track, streamToUse); } catch {}
+      });
+      console.log('[RTC] addTrack attached', {
+        a: streamToUse.getAudioTracks().length,
+        v: streamToUse.getVideoTracks().length,
+      });
+    } else {
+      try { peer.addTransceiver('audio', { direction: 'recvonly' }); } catch {}
+      try { peer.addTransceiver('video', { direction: 'recvonly' }); } catch {}
     }
 
     peer.oniceconnectionstatechange = () => {
       console.log('[RTC] iceConnectionState =', peer.iceConnectionState);
       setIsConnected(peer.iceConnectionState === 'connected' || peer.iceConnectionState === 'completed');
-      if (peer.iceConnectionState === 'connected' || peer.iceConnectionState === 'completed') {
-        ensureSending();
-      }
+      if (peer.iceConnectionState === 'connected' || peer.iceConnectionState === 'completed') ensureSending();
     };
     peer.onconnectionstatechange = () => {
       console.log('[RTC] connectionState =', peer.connectionState);
-      if (peer.connectionState === 'connected') {
-        ensureSending();
-      }
+      if (peer.connectionState === 'connected') ensureSending();
     };
 
     peer.ontrack = (event) => {
@@ -123,7 +125,7 @@ export const useSimpleCall = (socket, callerId, selfId, onCallReceived, onCallEn
     };
 
     if (initiator) {
-      const offer = await peer.createOffer();
+      const offer = await peer.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
       await peer.setLocalDescription(offer);
       await ensureSending();
       console.log('[SIGNAL] emit callUser ->', callerId);
@@ -133,21 +135,7 @@ export const useSimpleCall = (socket, callerId, selfId, onCallReceived, onCallEn
     return peer;
   };
 
-  // Re-attach tracks if localStream changes after peer is created
-  useEffect(() => {
-    const apply = async () => {
-      if (!peerRef.current || !localStream) return;
-      const a = localStream.getAudioTracks()[0] || null;
-      const v = localStream.getVideoTracks()[0] || null;
-      try { await audioSenderRef.current?.replaceTrack(a); } catch {}
-      try { await videoSenderRef.current?.replaceTrack(v); } catch {}
-      console.log('[RTC] (effect) re-attached tracks', { hasA: !!a, hasV: !!v });
-      await ensureSending();
-    };
-    apply();
-  }, [localStream]);
-
-  // Drain queued ICE candidates when remote description becomes set
+  // Буфер кандидатов до установки remoteDescription
   const drainPendingCandidates = async () => {
     if (!peerRef.current || !remoteDescSetRef.current) return;
     const queue = pendingCandidatesRef.current;
@@ -193,6 +181,18 @@ export const useSimpleCall = (socket, callerId, selfId, onCallReceived, onCallEn
       }
       const senders = peerRef.current.getSenders().map(s => ({ kind: s.track?.kind, enabled: s.track?.enabled, readyState: s.track?.readyState }));
       console.log(`[RTC][stats] inA=${inAudio} inV=${inVideo} outA=${outAudio} outV=${outVideo}${pairInfo} senders=`, senders);
+
+      // Если исходящий RTP отсутствует устойчиво — инициируем renegotiate
+      if (outAudio === 0 && outVideo === 0 && isConnected) {
+        zeroOutCounterRef.current += 1;
+        if (zeroOutCounterRef.current === 3) {
+          console.log('[RTC] trigger renegotiate due to zero outbound bytes');
+          triggerRenegotiate();
+        }
+      } else if (outAudio > 0 || outVideo > 0) {
+        zeroOutCounterRef.current = 0;
+      }
+
       if (count >= 10) {
         clearInterval(statsIntervalRef.current);
         statsIntervalRef.current = null;
@@ -240,6 +240,7 @@ export const useSimpleCall = (socket, callerId, selfId, onCallReceived, onCallEn
     setRemoteStream(null);
     pendingCandidatesRef.current = [];
     remoteDescSetRef.current = false;
+    zeroOutCounterRef.current = 0;
   };
 
   const toggleMic = () => {
@@ -280,6 +281,24 @@ export const useSimpleCall = (socket, callerId, selfId, onCallReceived, onCallEn
         peerRef.current.addIceCandidate(candidate).catch(err => console.warn('addIceCandidate failed', err));
       }
     };
+    const handleRenegotiate = async ({ offer }) => {
+      try {
+        if (!peerRef.current) return;
+        await peerRef.current.setRemoteDescription(offer);
+        const answer = await peerRef.current.createAnswer();
+        await peerRef.current.setLocalDescription(answer);
+        const to = incomingFromRef.current || callerId;
+        console.log('[SIGNAL] emit renegotiateAnswer ->', to);
+        socket.emit('renegotiateAnswer', { to, answer });
+      } catch (e) { console.warn('renegotiate (handle) failed', e); }
+    };
+    const handleRenegotiateAnswer = async ({ answer }) => {
+      try {
+        if (!peerRef.current) return;
+        await peerRef.current.setRemoteDescription(answer);
+        console.log('[SIGNAL] on renegotiateAnswer');
+      } catch (e) { console.warn('setRemoteDescription(answer) failed', e); }
+    };
     const handleCallEnded = () => {
       console.log('[SIGNAL] on callEnded');
       end();
@@ -291,12 +310,16 @@ export const useSimpleCall = (socket, callerId, selfId, onCallReceived, onCallEn
     socket.on('hey', handleHey);
     socket.on('callAccepted', handleCallAccepted);
     socket.on('iceCandidate', handleIceCandidate);
+    socket.on('renegotiate', handleRenegotiate);
+    socket.on('renegotiateAnswer', handleRenegotiateAnswer);
     socket.on('callEnded', handleCallEnded);
 
     return () => {
       socket.off('hey', handleHey);
       socket.off('callAccepted', handleCallAccepted);
       socket.off('iceCandidate', handleIceCandidate);
+      socket.off('renegotiate', handleRenegotiate);
+      socket.off('renegotiateAnswer', handleRenegotiateAnswer);
       socket.off('callEnded', handleCallEnded);
     };
   }, [socket, callerId, selfId, onCallReceived, onCallEndedCb, localStream, rtcConfig]);
