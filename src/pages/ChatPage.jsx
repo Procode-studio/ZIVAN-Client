@@ -60,7 +60,8 @@ function ChatPage({ userId }) {
           return newTypingUsers;
         });
       }
-    }, [selectedChat])
+    }, [selectedChat]),
+    (users) => setOnlineUsers(new Set(users))
   );
 
   const {
@@ -82,15 +83,6 @@ function ChatPage({ userId }) {
     toggleMic,
     toggleCamera
   } = useCallHandler(socket, selectedChat, userId, chats, iceConfig);
-
-  useEffect(() => {
-    if (socket) {
-      socket.on('updateOnlineUsers', (users) => setOnlineUsers(new Set(users)));
-    }
-    return () => {
-      if (socket) socket.off('updateOnlineUsers');
-    };
-  }, [socket]);
 
   useEffect(() => {
     const fetchChats = async () => {

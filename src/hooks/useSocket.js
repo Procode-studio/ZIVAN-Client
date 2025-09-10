@@ -1,8 +1,19 @@
 import { useEffect, useRef, useCallback } from 'react';
 import io from 'socket.io-client';
 
-export const useSocket = (url, onNewMessage, onUserTyping, onUserStoppedTyping) => {
+export const useSocket = (url, onNewMessage, onUserTyping, onUserStoppedTyping, onPresenceUpdate) => {
   const socketRef = useRef(null);
+
+  // Keep latest callbacks in refs so we don't recreate the socket on every render
+  const onNewMessageRef = useRef(onNewMessage);
+  const onUserTypingRef = useRef(onUserTyping);
+  const onUserStoppedTypingRef = useRef(onUserStoppedTyping);
+  const onPresenceUpdateRef = useRef(onPresenceUpdate);
+
+  useEffect(() => { onNewMessageRef.current = onNewMessage; }, [onNewMessage]);
+  useEffect(() => { onUserTypingRef.current = onUserTyping; }, [onUserTyping]);
+  useEffect(() => { onUserStoppedTypingRef.current = onUserStoppedTyping; }, [onUserStoppedTyping]);
+  useEffect(() => { onPresenceUpdateRef.current = onPresenceUpdate; }, [onPresenceUpdate]);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -21,8 +32,8 @@ export const useSocket = (url, onNewMessage, onUserTyping, onUserStoppedTyping) 
       upgrade: isProd ? false : true,
     };
 
-    socketRef.current = io(url, connectionOptions);
-    const socket = socketRef.current;
+    const socket = io(url, connectionOptions);
+    socketRef.current = socket;
 
     socket.on('connect', () => console.log('Socket.IO подключен:', socket.id));
     socket.on('disconnect', (reason) => console.log('Socket.IO отключен', reason));
@@ -30,16 +41,19 @@ export const useSocket = (url, onNewMessage, onUserTyping, onUserStoppedTyping) 
     socket.on('reconnect_attempt', (n) => console.log('Socket.IO reconnect_attempt:', n));
     socket.on('reconnect', (n) => console.log('Socket.IO reconnect:', n));
 
-    if (onNewMessage) socket.on('newMessage', onNewMessage);
-    if (onUserTyping) socket.on('userTyping', onUserTyping);
-    if (onUserStoppedTyping) socket.on('userStoppedTyping', onUserStoppedTyping);
+    // Stable handlers that call the latest refs
+    socket.on('newMessage', (data) => onNewMessageRef.current && onNewMessageRef.current(data));
+    socket.on('userTyping', (data) => onUserTypingRef.current && onUserTypingRef.current(data));
+    socket.on('userStoppedTyping', (data) => onUserStoppedTypingRef.current && onUserStoppedTypingRef.current(data));
+    socket.on('updateOnlineUsers', (users) => onPresenceUpdateRef.current && onPresenceUpdateRef.current(users));
 
     return () => {
-      if (socket) {
+      try {
+        socket.removeAllListeners();
         socket.disconnect();
-      }
+      } catch {}
     };
-  }, [url, onNewMessage, onUserTyping, onUserStoppedTyping]);
+  }, [url]);
 
   const joinRoom = useCallback((chatId) => socketRef.current?.emit('joinRoom', chatId), []);
   const sendMessage = useCallback((data) => socketRef.current?.emit('sendMessage', data), []);
