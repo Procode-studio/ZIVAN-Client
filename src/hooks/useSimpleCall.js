@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
-// useSimpleCall(socket, peerId, selfId, onCallReceived)
-export const useSimpleCall = (socket, callerId, selfId, onCallReceived) => {
+// useSimpleCall(socket, peerId, selfId, onCallReceived, onCallEndedCb?)
+export const useSimpleCall = (socket, callerId, selfId, onCallReceived, onCallEndedCb) => {
   const [localStream, setLocalStream] = useState(null);
   const [remoteStream, setRemoteStream] = useState(null);
   const peerRef = useRef(null);
@@ -42,13 +42,11 @@ export const useSimpleCall = (socket, callerId, selfId, onCallReceived) => {
     }
   };
 
-  // toIdForCandidates ensures ICE candidates go to the correct remote party
   const createPeer = (initiator, streamParam, toIdForCandidates) => {
     const peer = new RTCPeerConnection(rtcConfig);
 
     const streamToUse = streamParam || localStream;
 
-    // Ensure we can receive even if we don't send local tracks (e.g., permissions denied or camera off)
     const hasAudio = !!streamToUse && streamToUse.getAudioTracks().length > 0;
     const hasVideo = !!streamToUse && streamToUse.getVideoTracks().length > 0;
     if (!hasAudio) peer.addTransceiver('audio', { direction: 'recvonly' });
@@ -58,7 +56,6 @@ export const useSimpleCall = (socket, callerId, selfId, onCallReceived) => {
       streamToUse.getTracks().forEach(track => peer.addTrack(track, streamToUse));
     }
 
-    // Verbose diagnostics
     peer.oniceconnectionstatechange = () => {
       console.log('[RTC] iceConnectionState =', peer.iceConnectionState);
       setIsConnected(peer.iceConnectionState === 'connected' || peer.iceConnectionState === 'completed');
@@ -142,37 +139,40 @@ export const useSimpleCall = (socket, callerId, selfId, onCallReceived) => {
 
   useEffect(() => {
     if (!socket) return;
-    const onHey = (data) => {
+    const handleHey = (data) => {
       console.log('[SIGNAL] on hey from', data.from);
       incomingOfferRef.current = data.signal;
       incomingFromRef.current = data.from || null;
       if (onCallReceived) onCallReceived(data.from);
     };
-    const onCallAccepted = (signal) => {
+    const handleCallAccepted = (signal) => {
       console.log('[SIGNAL] on callAccepted');
       peerRef.current?.setRemoteDescription(signal);
     };
-    const onIceCandidate = (candidate) => {
+    const handleIceCandidate = (candidate) => {
       console.log('[SIGNAL] on iceCandidate');
       peerRef.current?.addIceCandidate(candidate);
     };
-    const onCallEnded = () => {
+    const handleCallEnded = () => {
       console.log('[SIGNAL] on callEnded');
       end();
+      if (typeof onCallEndedCb === 'function') {
+        try { onCallEndedCb(); } catch {}
+      }
     };
 
-    socket.on('hey', onHey);
-    socket.on('callAccepted', onCallAccepted);
-    socket.on('iceCandidate', onIceCandidate);
-    socket.on('callEnded', onCallEnded);
+    socket.on('hey', handleHey);
+    socket.on('callAccepted', handleCallAccepted);
+    socket.on('iceCandidate', handleIceCandidate);
+    socket.on('callEnded', handleCallEnded);
 
     return () => {
-      socket.off('hey', onHey);
-      socket.off('callAccepted', onCallAccepted);
-      socket.off('iceCandidate', onIceCandidate);
-      socket.off('callEnded', onCallEnded);
+      socket.off('hey', handleHey);
+      socket.off('callAccepted', handleCallAccepted);
+      socket.off('iceCandidate', handleIceCandidate);
+      socket.off('callEnded', handleCallEnded);
     };
-  }, [socket, callerId, selfId, onCallReceived, localStream, rtcConfig]);
+  }, [socket, callerId, selfId, onCallReceived, onCallEndedCb, localStream, rtcConfig]);
 
   return { localStream, remoteStream, call, answer, end, isConnected, toggleMic, toggleCamera, isMicOn, isCameraOn };
 };

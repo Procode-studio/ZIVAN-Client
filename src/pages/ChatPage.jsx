@@ -6,6 +6,7 @@ import CallInterface from '../components/CallInterface.jsx';
 import CallNotification from '../components/CallNotification.jsx';
 import ChatHeader from '../components/ChatHeader.jsx';
 import MessageList from '../components/MessageList.jsx';
+import MinimizedCallView from '../components/MinimizedCallView.jsx';
 import { useSimpleCall } from '../hooks/useSimpleCall.js';
 import './ChatPage.css';
 
@@ -56,7 +57,13 @@ function ChatPage({ userId }) {
     socket,
     otherUser?.id,
     userId,
-    () => setReceivingCall(true)
+    () => setReceivingCall(true),
+    () => {
+      setIsCalling(false);
+      setCallAccepted(false);
+      setReceivingCall(false);
+      setIsCallMinimized(false);
+    }
   );
 
   const [isCalling, setIsCalling] = useState(false);
@@ -133,10 +140,18 @@ function ChatPage({ userId }) {
     setIsCalling(false);
     setCallAccepted(false);
     setReceivingCall(false);
+    setIsCallMinimized(false);
   };
 
   return (
     <div className="chat-page">
+      {callAccepted && isCallMinimized && (
+        <MinimizedCallView
+          peerName={otherUser?.username || 'Unknown'}
+          onMaximize={() => setIsCallMinimized(false)}
+          onLeaveCall={handleLeave}
+        />
+      )}
       <CallInterface
         callAccepted={callAccepted}
         localStream={localStream}
