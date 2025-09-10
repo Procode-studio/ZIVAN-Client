@@ -5,7 +5,7 @@ import CreateChatModal from '../components/CreateChatModal.jsx';
 import CallUI from '../components/CallUI.jsx';
 import MinimizedCallView from '../components/MinimizedCallView.jsx';
 import Avatar from '../components/Avatar.jsx';
-import useSimpleCall from '../hooks/useSimpleCall.js'; 
+import { useSimpleCall } from '../hooks/useSimpleCall.js'; 
 import './ChatPage.css';
 
 function ChatPage({ userId }) {
@@ -64,25 +64,40 @@ function ChatPage({ userId }) {
     (users) => setOnlineUsers(new Set(users))
   );
 
-  const {
-    stream,
-    peerStream,
-    receivingCall,
-    callerInfo,
-    callAccepted,
-    isCalling,
-    isCallMinimized,
-    leaveCall,
-    callUser,
-    answerCall,
-    setReceivingCall,
-    setIsCallMinimized,
-	isMicOn,
-    isCameraOn,
-    peerCameraOn,
-    toggleMic,
-    toggleCamera
-  } = useSimpleCall(socket, otherUser?.id, (callerId) => setReceivingCall(true))
+  const { localStream, remoteStream, call, isConnected } = useSimpleCall(socket, otherUser?.id, (callerId) => setReceivingCall(true));
+  const otherUser = selectedChat?.members.find(m => m.id !== userId);
+  const isOtherUserOnline = otherUser ? onlineUsers.has(otherUser.id) : false;
+  const isOtherUserTyping = otherUser ? typingUsers[otherUser.id] : false;
+
+  // Handle call button
+  const handleCall = () => {
+    if (isOtherUserOnline) {
+      call();
+      setIsCalling(true);
+      setCallAccepted(true);
+    }
+  };
+
+  // Handle answer call
+  const handleAnswer = () => {
+    // useSimpleCall handles this automatically via onCallReceived
+    setReceivingCall(false);
+    setCallAccepted(true);
+  };
+
+  // Handle leave call
+  const handleLeave = () => {
+    socket.emit('endCall', { to: otherUser?.id });
+    setIsCalling(false);
+    setCallAccepted(false);
+    setReceivingCall(false);
+  };
+
+  // State for call UI
+  const [isCalling, setIsCalling] = useState(false);
+  const [callAccepted, setCallAccepted] = useState(false);
+  const [receivingCall, setReceivingCall] = useState(false);
+  const [isCallMinimized, setIsCallMinimized] = useState(false);
 
   useEffect(() => {
     const fetchChats = async () => {
@@ -126,26 +141,22 @@ function ChatPage({ userId }) {
     }
   };
 
-  const otherUser = selectedChat?.members.find(m => m.id !== userId);
-  const isOtherUserOnline = otherUser ? onlineUsers.has(otherUser.id) : false;
-  const isOtherUserTyping = otherUser ? typingUsers[otherUser.id] : false;
-
   return (
     <div className="chat-page">
       {callAccepted && (
         <CallUI 
-          stream={stream} 
-          peerStream={peerStream} 
-          onLeaveCall={leaveCall} 
-          peerName={otherUser?.username || callerInfo.fromName}
+          stream={localStream} 
+          peerStream={remoteStream} 
+          onLeaveCall={handleLeave} 
+          peerName={otherUser?.username || 'Unknown'}
           onMinimize={() => setIsCallMinimized(true)}
           isCalling={isCalling}
           isMinimized={isCallMinimized}
-		  isMicOn={isMicOn}
-		  isCameraOn={isCameraOn}
-		  peerCameraOn={peerCameraOn}
-		  toggleMic={toggleMic}
-		  toggleCamera={toggleCamera}
+          isMicOn={true} 
+          isCameraOn={true} 
+          peerCameraOn={isConnected} 
+          toggleMic={() => {}} 
+          toggleCamera={() => {}}
         />
       )}
       
@@ -176,9 +187,9 @@ function ChatPage({ userId }) {
         <main className="message-view">
           {callAccepted && isCallMinimized && (
             <MinimizedCallView 
-              peerName={otherUser?.username || callerInfo.fromName} 
+              peerName={otherUser?.username || 'Unknown'} 
               onMaximize={() => setIsCallMinimized(false)} 
-              onLeaveCall={leaveCall} 
+              onLeaveCall={handleLeave} 
             />
           )}
           {selectedChat ? (
@@ -192,15 +203,13 @@ function ChatPage({ userId }) {
                 <div className="chat-header-actions">
                   {selectedChat.type === 'private' && otherUser && !isCalling && !callAccepted && !receivingCall && (
                     <button
-                      onClick={() => callUser(otherUser.id)}
-                      disabled={!isOtherUserOnline || !(iceConfig?.iceServers?.length)}
+                      onClick={handleCall}
+                      disabled={!isOtherUserOnline}
                       className="call-btn"
-                      title={!(iceConfig?.iceServers?.length) ? 'Загрузка конфигурации звонка...' : ''}
                     >
                       📞
                     </button>
                   )}
-                  {isCalling && <p className="calling-status"><i>Вызов...</i></p>}
                 </div>
               </header>
               <div className="messages-list">
@@ -239,9 +248,9 @@ function ChatPage({ userId }) {
 
       {receivingCall && !callAccepted && (
         <div className="caller-notification">
-          <h1>Вам звонит {callerInfo.fromName}</h1>
+          <h1>Вам звонит {otherUser?.username || 'Unknown'}</h1>
           <div>
-            <button className="control-btn" onClick={answerCall}>✅</button>
+            <button className="control-btn" onClick={handleAnswer}>✅</button>
             <button className="control-btn hang-up" onClick={() => setReceivingCall(false)}>❌</button>
           </div>
         </div>
