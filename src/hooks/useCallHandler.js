@@ -44,7 +44,9 @@ export default function useCallHandler(socket, selectedChat, userId, chats, peer
 
     socket.on("hey", (data) => {
       const chatWithCaller = chats.find(chat => chat.members.some(m => m.id === data.from));
-      const callerName = chatWithCaller?.members.find(m => m.id === data.from)?.username || 'Unknown';
+      const derivedName = chatWithCaller?.members.find(m => m.id === data.from)?.username || 'Unknown';
+      const callerName = data.fromName || derivedName;
+      console.log('[SIGNAL][CLIENT] hey received from', data.from, 'name:', callerName);
       setCallerInfo({ from: data.from, signal: data.signal, fromName: callerName });
       setReceivingCall(true);
     });
@@ -146,7 +148,11 @@ export default function useCallHandler(socket, selectedChat, userId, chats, peer
 
     peer.on("signal", (data) => {
       if (data.type === 'offer') {
-        socket.emit("callUser", { userToCall: idToCall, signalData: data, from: userId });
+        // Try to include caller name so callee UI can render immediately without relying on chats state
+        const chatWithCallee = chats.find(chat => chat.members.some(m => m.id === idToCall));
+        const me = chatWithCallee?.members.find(m => m.id === userId);
+        const fromName = me?.username || '';
+        socket.emit("callUser", { userToCall: idToCall, signalData: data, from: userId, fromName });
       } else if (data.candidate) {
         socket.emit("iceCandidate", { to: idToCall, candidate: data });
       }

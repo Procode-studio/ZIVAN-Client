@@ -8,14 +8,20 @@ export const useSocket = (url, onNewMessage, onUserTyping, onUserStoppedTyping) 
     const token = localStorage.getItem('token');
     if (!token || !url) return;
 
-    socketRef.current = io(url, {
+    // Some hosting providers/proxies (like Render free tier) may drop WebSocket upgrades intermittently.
+    // Force long-polling in production as a stability fallback.
+    const isProd = /https?:\/\/zivan\.onrender\.com/i.test(url);
+    const connectionOptions = {
       auth: { token },
-      transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionAttempts: 10,
       reconnectionDelay: 1000,
       timeout: 20000,
-    });
+      transports: isProd ? ['polling'] : ['websocket', 'polling'],
+      upgrade: isProd ? false : true,
+    };
+
+    socketRef.current = io(url, connectionOptions);
     const socket = socketRef.current;
 
     socket.on('connect', () => console.log('Socket.IO подключен:', socket.id));
