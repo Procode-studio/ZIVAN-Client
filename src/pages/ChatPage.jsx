@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { getChats, getMessages } from '../api/chatApi';
 import { useSocket } from '../hooks/useSocket';
 import CreateChatModal from '../components/CreateChatModal.jsx';
@@ -48,10 +48,11 @@ function ChatPage({ userId }) {
     (users) => setOnlineUsers(new Set(users))
   );
 
-  const { localStream, remoteStream, call, isConnected } = useSimpleCall(socket, otherUser?.id, (callerId) => setReceivingCall(true));
   const otherUser = selectedChat?.members.find(m => m.id !== userId);
   const isOtherUserOnline = otherUser ? onlineUsers.has(otherUser.id) : false;
   const isOtherUserTyping = otherUser ? typingUsers[otherUser.id] : false;
+
+  const { localStream, remoteStream, call, isConnected } = useSimpleCall(socket, otherUser?.id, () => setReceivingCall(true));
 
   const [isCalling, setIsCalling] = useState(false);
   const [callAccepted, setCallAccepted] = useState(false);
@@ -179,6 +180,7 @@ function ChatPage({ userId }) {
             onSendMessage={handleSendMessage}
             onTyping={handleTyping}
             messagesEndRef={messagesEndRef}
+            userId={userId}
           />
         </main>
       </div>

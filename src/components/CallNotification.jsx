@@ -1,5 +1,4 @@
 import React from 'react';
-import './ChatPage.css';
 
 function CallNotification({ receivingCall, callAccepted, peerName, onAnswer, onReject }) {
   if (!receivingCall || callAccepted) return null;

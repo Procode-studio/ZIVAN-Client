@@ -6,17 +6,17 @@ export const useSimpleCall = (socket, callerId, onCallReceived) => {
   const peerRef = useRef(null);
   const [isConnected, setIsConnected] = useState(false);
 
-  useEffect(() => {
-    const getMedia = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        setLocalStream(stream);
-      } catch (err) {
-        console.error('getUserMedia error:', err);
-      }
-    };
-    getMedia();
-  }, []);
+  // Helper to request media only when needed (user action)
+  const getMedia = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      setLocalStream(stream);
+      return stream;
+    } catch (err) {
+      console.error('getUserMedia error:', err);
+      return null;
+    }
+  };
 
   const createPeer = (initiator) => {
     const peer = new RTCPeerConnection({
@@ -51,12 +51,21 @@ export const useSimpleCall = (socket, callerId, onCallReceived) => {
     return peer;
   };
 
-  const call = () => {
+  const call = async () => {
+    if (!callerId) return;
+    if (!localStream) {
+      const stream = await getMedia();
+      if (!stream) return;
+    }
     const peer = createPeer(true);
     peerRef.current = peer;
   };
 
-  const answer = (offer) => {
+  const answer = async (offer) => {
+    if (!localStream) {
+      const stream = await getMedia();
+      if (!stream) return;
+    }
     const peer = createPeer(false);
     peerRef.current = peer;
     peer.setRemoteDescription(offer);
@@ -67,26 +76,32 @@ export const useSimpleCall = (socket, callerId, onCallReceived) => {
   };
 
   useEffect(() => {
-    socket.on('hey', (data) => {
+    if (!socket) return;
+    const onHey = (data) => {
       answer(data.signal);
       if (onCallReceived) onCallReceived(data.from);
-    });
-    socket.on('callAccepted', (signal) => {
+    };
+    const onCallAccepted = (signal) => {
       peerRef.current?.setRemoteDescription(signal);
-    });
-    socket.on('iceCandidate', (candidate) => {
+    };
+    const onIceCandidate = (candidate) => {
       peerRef.current?.addIceCandidate(candidate);
-    });
-    socket.on('callEnded', () => {
+    };
+    const onCallEnded = () => {
       peerRef.current?.close();
       setIsConnected(false);
-    });
+    };
+
+    socket.on('hey', onHey);
+    socket.on('callAccepted', onCallAccepted);
+    socket.on('iceCandidate', onIceCandidate);
+    socket.on('callEnded', onCallEnded);
 
     return () => {
-      socket.off('hey');
-      socket.off('callAccepted');
-      socket.off('iceCandidate');
-      socket.off('callEnded');
+      socket.off('hey', onHey);
+      socket.off('callAccepted', onCallAccepted);
+      socket.off('iceCandidate', onIceCandidate);
+      socket.off('callEnded', onCallEnded);
     };
   }, [socket, callerId, onCallReceived]);
 

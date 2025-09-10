@@ -1,7 +1,6 @@
 import React from 'react';
-import './ChatPage.css';
 
-function MessageList({ selectedChat, messages, loadingMessages, newMessage, onSendMessage, onTyping, messagesEndRef }) {
+function MessageList({ selectedChat, messages, loadingMessages, newMessage, onSendMessage, onTyping, messagesEndRef, userId }) {
   if (!selectedChat) {
     return <p className="select-chat-prompt">Выберите чат, чтобы начать общение.</p>;
   }
@@ -13,7 +12,7 @@ function MessageList({ selectedChat, messages, loadingMessages, newMessage, onSe
           <p>Загрузка сообщений...</p>
         ) : (
           messages.map(msg => {
-            const isOwnMessage = msg.sender_id === selectedChat.members.find(m => m.id !== msg.sender_id)?.id; // Assuming userId is available in context
+            const isOwnMessage = msg.sender_id === userId;
             return (
               <div key={msg.id} className={`message-row ${isOwnMessage ? 'own' : 'other'}`}>
                 <div className="message">
