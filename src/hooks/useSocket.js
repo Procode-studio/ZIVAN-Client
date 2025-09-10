@@ -11,11 +11,19 @@ export const useSocket = (url, onNewMessage, onUserTyping, onUserStoppedTyping) 
     socketRef.current = io(url, {
       auth: { token },
       transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000,
+      timeout: 20000,
     });
     const socket = socketRef.current;
 
     socket.on('connect', () => console.log('Socket.IO подключен:', socket.id));
-    socket.on('disconnect', () => console.log('Socket.IO отключен'));
+    socket.on('disconnect', (reason) => console.log('Socket.IO отключен', reason));
+    socket.on('connect_error', (err) => console.log('Socket.IO connect_error:', err.message));
+    socket.on('reconnect_attempt', (n) => console.log('Socket.IO reconnect_attempt:', n));
+    socket.on('reconnect', (n) => console.log('Socket.IO reconnect:', n));
+
     if (onNewMessage) socket.on('newMessage', onNewMessage);
     if (onUserTyping) socket.on('userTyping', onUserTyping);
     if (onUserStoppedTyping) socket.on('userStoppedTyping', onUserStoppedTyping);

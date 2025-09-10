@@ -199,7 +199,14 @@ function ChatPage({ userId }) {
                 </div>
                 <div className="chat-header-actions">
                   {selectedChat.type === 'private' && otherUser && !isCalling && !callAccepted && !receivingCall && (
-                    <button onClick={() => callUser(otherUser.id)} disabled={!isOtherUserOnline} className="call-btn">📞</button>
+                    <button
+                      onClick={() => callUser(otherUser.id)}
+                      disabled={!isOtherUserOnline || !(iceConfig?.iceServers?.length)}
+                      className="call-btn"
+                      title={!(iceConfig?.iceServers?.length) ? 'Загрузка конфигурации звонка...' : ''}
+                    >
+                      📞
+                    </button>
                   )}
                   {isCalling && <p className="calling-status"><i>Вызов...</i></p>}
                 </div>
