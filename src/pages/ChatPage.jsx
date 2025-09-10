@@ -76,6 +76,12 @@ function ChatPage({ userId }) {
 
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
+  useEffect(() => {
+    if (isConnected && isCalling) {
+      setIsCalling(false);
+    }
+  }, [isConnected, isCalling]);
+
   const handleSelectChat = async (chat) => {
     setSelectedChat(chat);
     setIsMobileListOpen(false);

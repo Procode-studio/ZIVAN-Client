@@ -47,11 +47,28 @@ export const useSimpleCall = (socket, callerId, selfId, onCallReceived) => {
     const peer = new RTCPeerConnection(rtcConfig);
 
     const streamToUse = streamParam || localStream;
+
+    // Ensure we can receive even if we don't send local tracks (e.g., permissions denied or camera off)
+    const hasAudio = !!streamToUse && streamToUse.getAudioTracks().length > 0;
+    const hasVideo = !!streamToUse && streamToUse.getVideoTracks().length > 0;
+    if (!hasAudio) peer.addTransceiver('audio', { direction: 'recvonly' });
+    if (!hasVideo) peer.addTransceiver('video', { direction: 'recvonly' });
+
     if (streamToUse) {
       streamToUse.getTracks().forEach(track => peer.addTrack(track, streamToUse));
     }
 
+    // Verbose diagnostics
+    peer.oniceconnectionstatechange = () => {
+      console.log('[RTC] iceConnectionState =', peer.iceConnectionState);
+      setIsConnected(peer.iceConnectionState === 'connected' || peer.iceConnectionState === 'completed');
+    };
+    peer.onconnectionstatechange = () => {
+      console.log('[RTC] connectionState =', peer.connectionState);
+    };
+
     peer.ontrack = (event) => {
+      console.log('[RTC] ontrack received');
       setRemoteStream(event.streams[0]);
       setIsConnected(true);
     };
@@ -59,6 +76,7 @@ export const useSimpleCall = (socket, callerId, selfId, onCallReceived) => {
     peer.onicecandidate = (event) => {
       if (event.candidate) {
         const target = toIdForCandidates || callerId || incomingFromRef.current;
+        console.log('[SIGNAL] emit iceCandidate ->', target);
         if (target) socket.emit('iceCandidate', { to: target, candidate: event.candidate });
       }
     };
@@ -66,6 +84,7 @@ export const useSimpleCall = (socket, callerId, selfId, onCallReceived) => {
     if (initiator) {
       peer.createOffer().then((offer) => {
         peer.setLocalDescription(offer);
+        console.log('[SIGNAL] emit callUser ->', callerId);
         socket.emit('callUser', { userToCall: callerId, signalData: offer, from: selfId });
       });
     }
@@ -92,6 +111,7 @@ export const useSimpleCall = (socket, callerId, selfId, onCallReceived) => {
     peer.setRemoteDescription(offerToUse);
     peer.createAnswer().then((answer) => {
       peer.setLocalDescription(answer);
+      console.log('[SIGNAL] emit acceptCall ->', targetId);
       if (targetId) socket.emit('acceptCall', { signal: answer, to: targetId });
     });
   };
@@ -123,17 +143,21 @@ export const useSimpleCall = (socket, callerId, selfId, onCallReceived) => {
   useEffect(() => {
     if (!socket) return;
     const onHey = (data) => {
+      console.log('[SIGNAL] on hey from', data.from);
       incomingOfferRef.current = data.signal;
       incomingFromRef.current = data.from || null;
       if (onCallReceived) onCallReceived(data.from);
     };
     const onCallAccepted = (signal) => {
+      console.log('[SIGNAL] on callAccepted');
       peerRef.current?.setRemoteDescription(signal);
     };
     const onIceCandidate = (candidate) => {
+      console.log('[SIGNAL] on iceCandidate');
       peerRef.current?.addIceCandidate(candidate);
     };
     const onCallEnded = () => {
+      console.log('[SIGNAL] on callEnded');
       end();
     };
 
