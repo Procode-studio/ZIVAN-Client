@@ -1,6 +1,5 @@
 import React from 'react';
 import Avatar from './Avatar.jsx';
-import './ChatPage.css';
 
 function ChatHeader({ selectedChat, otherUser, isOtherUserOnline, isOtherUserTyping, onCall, isCalling, callAccepted, receivingCall }) {
   if (!selectedChat) return null;
