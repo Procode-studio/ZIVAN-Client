@@ -16,6 +16,7 @@ export const useSimpleCall = (socket, callerId, selfId, onCallReceived, onCallEn
       { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
     ],
   });
+  const statsIntervalRef = useRef(null);
 
   useEffect(() => {
     const api = import.meta.env.VITE_API_URL;
@@ -89,12 +90,40 @@ export const useSimpleCall = (socket, callerId, selfId, onCallReceived, onCallEn
     return peer;
   };
 
+  const startStatsLogging = () => {
+    if (!peerRef.current) return;
+    if (statsIntervalRef.current) clearInterval(statsIntervalRef.current);
+    let count = 0;
+    statsIntervalRef.current = setInterval(async () => {
+      count += 1;
+      if (!peerRef.current) return;
+      const stats = await peerRef.current.getStats();
+      let inAudio = 0, inVideo = 0, outAudio = 0, outVideo = 0;
+      stats.forEach(report => {
+        if (report.type === 'inbound-rtp') {
+          if (report.kind === 'audio') inAudio = report.bytesReceived || inAudio;
+          if (report.kind === 'video') inVideo = report.bytesReceived || inVideo;
+        }
+        if (report.type === 'outbound-rtp') {
+          if (report.kind === 'audio') outAudio = report.bytesSent || outAudio;
+          if (report.kind === 'video') outVideo = report.bytesSent || outVideo;
+        }
+      });
+      console.log(`[RTC][stats] inA=${inAudio} inV=${inVideo} outA=${outAudio} outV=${outVideo}`);
+      if (count >= 10) {
+        clearInterval(statsIntervalRef.current);
+        statsIntervalRef.current = null;
+      }
+    }, 2000);
+  };
+
   const call = async () => {
     if (!callerId) return;
     const stream = localStream || await getMedia();
     if (!stream) return;
     const peer = createPeer(true, stream, callerId);
     peerRef.current = peer;
+    startStatsLogging();
   };
 
   const answer = async (offer) => {
@@ -111,11 +140,13 @@ export const useSimpleCall = (socket, callerId, selfId, onCallReceived, onCallEn
       console.log('[SIGNAL] emit acceptCall ->', targetId);
       if (targetId) socket.emit('acceptCall', { signal: answer, to: targetId });
     });
+    startStatsLogging();
   };
 
   const end = () => {
     try { peerRef.current?.close(); } catch {}
     peerRef.current = null;
+    if (statsIntervalRef.current) { clearInterval(statsIntervalRef.current); statsIntervalRef.current = null; }
     if (localStream) {
       localStream.getTracks().forEach(t => t.stop());
     }
@@ -174,5 +205,5 @@ export const useSimpleCall = (socket, callerId, selfId, onCallReceived, onCallEn
     };
   }, [socket, callerId, selfId, onCallReceived, onCallEndedCb, localStream, rtcConfig]);
 
-  return { localStream, remoteStream, call, answer, end, isConnected, toggleMic, toggleCamera, isMicOn, isCameraOn };
+  return { localStream, remoteStream, call, answer, end, isConnected, toggleMic, toggleCamera, isMicOn, isCameraOn, startStatsLogging };
 };
