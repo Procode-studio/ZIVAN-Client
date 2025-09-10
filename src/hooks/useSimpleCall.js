@@ -17,6 +17,8 @@ export const useSimpleCall = (socket, callerId, selfId, onCallReceived, onCallEn
     ],
   });
   const statsIntervalRef = useRef(null);
+  const audioSenderRef = useRef(null);
+  const videoSenderRef = useRef(null);
 
   useEffect(() => {
     const api = import.meta.env.VITE_API_URL;
@@ -34,8 +36,13 @@ export const useSimpleCall = (socket, callerId, selfId, onCallReceived, onCallEn
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       setLocalStream(stream);
+      // Respect toggles
       if (!isMicOn && stream.getAudioTracks().length) stream.getAudioTracks()[0].enabled = false;
       if (!isCameraOn && stream.getVideoTracks().length) stream.getVideoTracks()[0].enabled = false;
+      console.log('[RTC] getUserMedia -> tracks', {
+        a: stream.getAudioTracks().map(t => t.id),
+        v: stream.getVideoTracks().map(t => t.id)
+      });
       return stream;
     } catch (err) {
       console.error('getUserMedia error:', err);
@@ -43,18 +50,22 @@ export const useSimpleCall = (socket, callerId, selfId, onCallReceived, onCallEn
     }
   };
 
-  const createPeer = (initiator, streamParam, toIdForCandidates) => {
+  const createPeer = async (initiator, streamParam, toIdForCandidates) => {
     const peer = new RTCPeerConnection(rtcConfig);
 
+    // Create transceivers in sendrecv to ensure RTP setup across browsers
+    const audioTrans = peer.addTransceiver('audio', { direction: 'sendrecv' });
+    const videoTrans = peer.addTransceiver('video', { direction: 'sendrecv' });
+    audioSenderRef.current = audioTrans.sender;
+    videoSenderRef.current = videoTrans.sender;
+
     const streamToUse = streamParam || localStream;
-
-    const hasAudio = !!streamToUse && streamToUse.getAudioTracks().length > 0;
-    const hasVideo = !!streamToUse && streamToUse.getVideoTracks().length > 0;
-    if (!hasAudio) peer.addTransceiver('audio', { direction: 'recvonly' });
-    if (!hasVideo) peer.addTransceiver('video', { direction: 'recvonly' });
-
     if (streamToUse) {
-      streamToUse.getTracks().forEach(track => peer.addTrack(track, streamToUse));
+      const a = streamToUse.getAudioTracks()[0] || null;
+      const v = streamToUse.getVideoTracks()[0] || null;
+      try { await audioSenderRef.current.replaceTrack(a); } catch {}
+      try { await videoSenderRef.current.replaceTrack(v); } catch {}
+      console.log('[RTC] replaceTrack attached', { hasA: !!a, hasV: !!v });
     }
 
     peer.oniceconnectionstatechange = () => {
@@ -80,15 +91,27 @@ export const useSimpleCall = (socket, callerId, selfId, onCallReceived, onCallEn
     };
 
     if (initiator) {
-      peer.createOffer().then((offer) => {
-        peer.setLocalDescription(offer);
-        console.log('[SIGNAL] emit callUser ->', callerId);
-        socket.emit('callUser', { userToCall: callerId, signalData: offer, from: selfId });
-      });
+      const offer = await peer.createOffer();
+      await peer.setLocalDescription(offer);
+      console.log('[SIGNAL] emit callUser ->', callerId);
+      socket.emit('callUser', { userToCall: callerId, signalData: offer, from: selfId });
     }
 
     return peer;
   };
+
+  // Re-attach tracks if localStream changes after peer is created
+  useEffect(() => {
+    const apply = async () => {
+      if (!peerRef.current || !localStream) return;
+      const a = localStream.getAudioTracks()[0] || null;
+      const v = localStream.getVideoTracks()[0] || null;
+      try { await audioSenderRef.current?.replaceTrack(a); } catch {}
+      try { await videoSenderRef.current?.replaceTrack(v); } catch {}
+      console.log('[RTC] (effect) re-attached tracks', { hasA: !!a, hasV: !!v });
+    };
+    apply();
+  }, [localStream]);
 
   const startStatsLogging = () => {
     if (!peerRef.current) return;
@@ -101,12 +124,14 @@ export const useSimpleCall = (socket, callerId, selfId, onCallReceived, onCallEn
       let inAudio = 0, inVideo = 0, outAudio = 0, outVideo = 0;
       stats.forEach(report => {
         if (report.type === 'inbound-rtp') {
-          if (report.kind === 'audio') inAudio = report.bytesReceived || inAudio;
-          if (report.kind === 'video') inVideo = report.bytesReceived || inVideo;
+          const kind = report.kind || report.mediaType;
+          if (kind === 'audio') inAudio = report.bytesReceived || inAudio;
+          if (kind === 'video') inVideo = report.bytesReceived || inVideo;
         }
         if (report.type === 'outbound-rtp') {
-          if (report.kind === 'audio') outAudio = report.bytesSent || outAudio;
-          if (report.kind === 'video') outVideo = report.bytesSent || outVideo;
+          const kind = report.kind || report.mediaType;
+          if (kind === 'audio') outAudio = report.bytesSent || outAudio;
+          if (kind === 'video') outVideo = report.bytesSent || outVideo;
         }
       });
       console.log(`[RTC][stats] inA=${inAudio} inV=${inVideo} outA=${outAudio} outV=${outVideo}`);
@@ -121,7 +146,7 @@ export const useSimpleCall = (socket, callerId, selfId, onCallReceived, onCallEn
     if (!callerId) return;
     const stream = localStream || await getMedia();
     if (!stream) return;
-    const peer = createPeer(true, stream, callerId);
+    const peer = await createPeer(true, stream, callerId);
     peerRef.current = peer;
     startStatsLogging();
   };
@@ -130,16 +155,15 @@ export const useSimpleCall = (socket, callerId, selfId, onCallReceived, onCallEn
     const stream = localStream || await getMedia();
     if (!stream) return;
     const targetId = incomingFromRef.current || callerId;
-    const peer = createPeer(false, stream, targetId);
+    const peer = await createPeer(false, stream, targetId);
     peerRef.current = peer;
     const offerToUse = offer || incomingOfferRef.current;
     if (!offerToUse) return;
-    peer.setRemoteDescription(offerToUse);
-    peer.createAnswer().then((answer) => {
-      peer.setLocalDescription(answer);
-      console.log('[SIGNAL] emit acceptCall ->', targetId);
-      if (targetId) socket.emit('acceptCall', { signal: answer, to: targetId });
-    });
+    await peer.setRemoteDescription(offerToUse);
+    const answerDesc = await peer.createAnswer();
+    await peer.setLocalDescription(answerDesc);
+    console.log('[SIGNAL] emit acceptCall ->', targetId);
+    if (targetId) socket.emit('acceptCall', { signal: answerDesc, to: targetId });
     startStatsLogging();
   };
 
