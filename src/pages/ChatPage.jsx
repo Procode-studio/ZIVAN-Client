@@ -5,7 +5,7 @@ import CreateChatModal from '../components/CreateChatModal.jsx';
 import CallUI from '../components/CallUI.jsx';
 import MinimizedCallView from '../components/MinimizedCallView.jsx';
 import Avatar from '../components/Avatar.jsx';
-import useCallHandler from '../hooks/useCallHandler'; // New hook
+import useCallHandler from '../hooks/useCallHandler'; 
 import './ChatPage.css';
 
 function ChatPage({ userId }) {
@@ -82,7 +82,7 @@ function ChatPage({ userId }) {
     peerCameraOn,
     toggleMic,
     toggleCamera
-  } = useCallHandler(socket, selectedChat, userId, chats, iceConfig);
+  } = useSimpleCall(socket, otherUser?.id, (callerId) => setReceivingCall(true))
 
   useEffect(() => {
     const fetchChats = async () => {
