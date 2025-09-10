@@ -2,7 +2,7 @@ import React, { useRef, useEffect } from 'react';
 import Avatar from './Avatar.jsx';
 import './CallUI.css';
 
-function CallInterface({ callAccepted, localStream, remoteStream, onLeaveCall, peerName, onMinimize, isCalling, isMinimized, isConnected }) {
+function CallInterface({ callAccepted, localStream, remoteStream, onLeaveCall, peerName, onMinimize, isCalling, isMinimized, isConnected, isMicOn, isCameraOn, onToggleMic, onToggleCamera }) {
   const myVideo = useRef();
   const userVideo = useRef();
 
@@ -26,7 +26,7 @@ function CallInterface({ callAccepted, localStream, remoteStream, onLeaveCall, p
     <div className={`call-overlay ${isMinimized ? 'minimized' : ''}`}>
       <div className="call-info">
         <h2>{peerName}</h2>
-        <p>{isCalling ? 'Вызов...' : 'Соединение установлено'}</p>
+        <p>{isCalling ? 'Вызов...' : (isConnected ? 'Соединение установлено' : 'Ожидание...')}</p>
       </div>
       <div className="call-videos">
         <video 
@@ -44,15 +44,15 @@ function CallInterface({ callAccepted, localStream, remoteStream, onLeaveCall, p
             autoPlay 
             playsInline 
             muted 
-            style={{ display: localStream ? 'block' : 'none' }} 
+            style={{ display: localStream && isCameraOn ? 'block' : 'none' }} 
           />
-          {!localStream && <div className="my-video"><Avatar username="You" size={100} /></div>}
+          {(!localStream || !isCameraOn) && <div className="my-video"><Avatar username="You" size={100} /></div>}
         </div>
       </div>
       <div className="call-controls">
         <button className="control-btn" onClick={onMinimize}>⬇️</button>
-        <button className="control-btn">🎤</button>
-        <button className="control-btn">📹</button>
+        <button className="control-btn" onClick={onToggleMic}>{isMicOn ? '🎤' : '🔇'}</button>
+        <button className="control-btn" onClick={onToggleCamera}>{isCameraOn ? '📹' : '📸'}</button>
         <button className="control-btn hang-up" onClick={onLeaveCall}>📞</button>
       </div>
     </div>

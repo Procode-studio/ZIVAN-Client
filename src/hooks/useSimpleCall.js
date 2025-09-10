@@ -1,16 +1,40 @@
 import { useEffect, useRef, useState } from 'react';
 
-export const useSimpleCall = (socket, callerId, onCallReceived) => {
+// useSimpleCall(socket, peerId, selfId, onCallReceived)
+export const useSimpleCall = (socket, callerId, selfId, onCallReceived) => {
   const [localStream, setLocalStream] = useState(null);
   const [remoteStream, setRemoteStream] = useState(null);
   const peerRef = useRef(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [isMicOn, setIsMicOn] = useState(true);
+  const [isCameraOn, setIsCameraOn] = useState(true);
+  const incomingOfferRef = useRef(null);
+  const incomingFromRef = useRef(null);
+  const [rtcConfig, setRtcConfig] = useState({
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+    ],
+  });
 
-  // Helper to request media only when needed (user action)
+  useEffect(() => {
+    const api = import.meta.env.VITE_API_URL;
+    if (!api) return;
+    fetch(`${api}/api/config/ice`).then(async (r) => {
+      if (!r.ok) return;
+      const cfg = await r.json();
+      if (cfg && cfg.iceServers && Array.isArray(cfg.iceServers)) {
+        setRtcConfig(cfg);
+      }
+    }).catch(() => {});
+  }, []);
+
   const getMedia = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       setLocalStream(stream);
+      if (!isMicOn && stream.getAudioTracks().length) stream.getAudioTracks()[0].enabled = false;
+      if (!isCameraOn && stream.getVideoTracks().length) stream.getVideoTracks()[0].enabled = false;
       return stream;
     } catch (err) {
       console.error('getUserMedia error:', err);
@@ -18,16 +42,13 @@ export const useSimpleCall = (socket, callerId, onCallReceived) => {
     }
   };
 
-  const createPeer = (initiator) => {
-    const peer = new RTCPeerConnection({
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
-      ],
-    });
+  // toIdForCandidates ensures ICE candidates go to the correct remote party
+  const createPeer = (initiator, streamParam, toIdForCandidates) => {
+    const peer = new RTCPeerConnection(rtcConfig);
 
-    if (localStream) {
-      localStream.getTracks().forEach(track => peer.addTrack(track, localStream));
+    const streamToUse = streamParam || localStream;
+    if (streamToUse) {
+      streamToUse.getTracks().forEach(track => peer.addTrack(track, streamToUse));
     }
 
     peer.ontrack = (event) => {
@@ -37,14 +58,15 @@ export const useSimpleCall = (socket, callerId, onCallReceived) => {
 
     peer.onicecandidate = (event) => {
       if (event.candidate) {
-        socket.emit('iceCandidate', { to: callerId, candidate: event.candidate });
+        const target = toIdForCandidates || callerId || incomingFromRef.current;
+        if (target) socket.emit('iceCandidate', { to: target, candidate: event.candidate });
       }
     };
 
     if (initiator) {
       peer.createOffer().then((offer) => {
         peer.setLocalDescription(offer);
-        socket.emit('callUser', { userToCall: callerId, signalData: offer });
+        socket.emit('callUser', { userToCall: callerId, signalData: offer, from: selfId });
       });
     }
 
@@ -53,32 +75,56 @@ export const useSimpleCall = (socket, callerId, onCallReceived) => {
 
   const call = async () => {
     if (!callerId) return;
-    if (!localStream) {
-      const stream = await getMedia();
-      if (!stream) return;
-    }
-    const peer = createPeer(true);
+    const stream = localStream || await getMedia();
+    if (!stream) return;
+    const peer = createPeer(true, stream, callerId);
     peerRef.current = peer;
   };
 
   const answer = async (offer) => {
-    if (!localStream) {
-      const stream = await getMedia();
-      if (!stream) return;
-    }
-    const peer = createPeer(false);
+    const stream = localStream || await getMedia();
+    if (!stream) return;
+    const targetId = incomingFromRef.current || callerId;
+    const peer = createPeer(false, stream, targetId);
     peerRef.current = peer;
-    peer.setRemoteDescription(offer);
+    const offerToUse = offer || incomingOfferRef.current;
+    if (!offerToUse) return;
+    peer.setRemoteDescription(offerToUse);
     peer.createAnswer().then((answer) => {
       peer.setLocalDescription(answer);
-      socket.emit('acceptCall', { signal: answer, to: callerId });
+      if (targetId) socket.emit('acceptCall', { signal: answer, to: targetId });
     });
+  };
+
+  const end = () => {
+    try { peerRef.current?.close(); } catch {}
+    peerRef.current = null;
+    if (localStream) {
+      localStream.getTracks().forEach(t => t.stop());
+    }
+    setIsConnected(false);
+    setRemoteStream(null);
+  };
+
+  const toggleMic = () => {
+    const newEnabled = !isMicOn;
+    setIsMicOn(newEnabled);
+    const track = localStream?.getAudioTracks?.()[0];
+    if (track) track.enabled = newEnabled;
+  };
+
+  const toggleCamera = () => {
+    const newEnabled = !isCameraOn;
+    setIsCameraOn(newEnabled);
+    const track = localStream?.getVideoTracks?.()[0];
+    if (track) track.enabled = newEnabled;
   };
 
   useEffect(() => {
     if (!socket) return;
     const onHey = (data) => {
-      answer(data.signal);
+      incomingOfferRef.current = data.signal;
+      incomingFromRef.current = data.from || null;
       if (onCallReceived) onCallReceived(data.from);
     };
     const onCallAccepted = (signal) => {
@@ -88,8 +134,7 @@ export const useSimpleCall = (socket, callerId, onCallReceived) => {
       peerRef.current?.addIceCandidate(candidate);
     };
     const onCallEnded = () => {
-      peerRef.current?.close();
-      setIsConnected(false);
+      end();
     };
 
     socket.on('hey', onHey);
@@ -103,7 +148,7 @@ export const useSimpleCall = (socket, callerId, onCallReceived) => {
       socket.off('iceCandidate', onIceCandidate);
       socket.off('callEnded', onCallEnded);
     };
-  }, [socket, callerId, onCallReceived]);
+  }, [socket, callerId, selfId, onCallReceived, localStream, rtcConfig]);
 
-  return { localStream, remoteStream, call, isConnected };
+  return { localStream, remoteStream, call, answer, end, isConnected, toggleMic, toggleCamera, isMicOn, isCameraOn };
 };

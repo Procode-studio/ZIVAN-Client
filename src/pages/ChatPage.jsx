@@ -52,7 +52,12 @@ function ChatPage({ userId }) {
   const isOtherUserOnline = otherUser ? onlineUsers.has(otherUser.id) : false;
   const isOtherUserTyping = otherUser ? typingUsers[otherUser.id] : false;
 
-  const { localStream, remoteStream, call, isConnected } = useSimpleCall(socket, otherUser?.id, () => setReceivingCall(true));
+  const { localStream, remoteStream, call, answer, end, isConnected, toggleMic, toggleCamera, isMicOn, isCameraOn } = useSimpleCall(
+    socket,
+    otherUser?.id,
+    userId,
+    () => setReceivingCall(true)
+  );
 
   const [isCalling, setIsCalling] = useState(false);
   const [callAccepted, setCallAccepted] = useState(false);
@@ -113,9 +118,11 @@ function ChatPage({ userId }) {
   const handleAnswer = () => {
     setReceivingCall(false);
     setCallAccepted(true);
+    answer();
   };
 
   const handleLeave = () => {
+    end();
     socket.emit('endCall', { to: otherUser?.id });
     setIsCalling(false);
     setCallAccepted(false);
@@ -124,7 +131,6 @@ function ChatPage({ userId }) {
 
   return (
     <div className="chat-page">
-      {/* Mobile toggle button */}
       <CallInterface
         callAccepted={callAccepted}
         localStream={localStream}
@@ -135,6 +141,10 @@ function ChatPage({ userId }) {
         isCalling={isCalling}
         isMinimized={isCallMinimized}
         isConnected={isConnected}
+        isMicOn={isMicOn}
+        isCameraOn={isCameraOn}
+        onToggleMic={toggleMic}
+        onToggleCamera={toggleCamera}
       />
 
       <header className="chat-header-global">
