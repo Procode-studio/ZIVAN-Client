@@ -52,6 +52,31 @@ export const useSimpleCall = (socket, callerId, selfId, onCallReceived, onCallEn
     }
   };
 
+  // Принудительно убеждаемся, что sender'ы отправляют: включаем encodings.active и заново привязываем дорожки
+  const ensureSending = async () => {
+    if (!peerRef.current) return;
+    const senders = peerRef.current.getSenders();
+    for (const s of senders) {
+      try {
+        const params = s.getParameters?.();
+        if (params && Array.isArray(params.encodings)) {
+          let changed = false;
+          params.encodings = params.encodings.map(e => {
+            if (e && e.active === false) { changed = true; return { ...e, active: true }; }
+            return e || { active: true };
+          });
+          if (changed) await s.setParameters(params).catch(() => {});
+        }
+      } catch {}
+    }
+    // повторная привязка локальных дорожек
+    const a = localStream?.getAudioTracks?.()[0] || null;
+    const v = localStream?.getVideoTracks?.()[0] || null;
+    try { await audioSenderRef.current?.replaceTrack(a); } catch {}
+    try { await videoSenderRef.current?.replaceTrack(v); } catch {}
+    console.log('[RTC] ensureSending applied');
+  };
+
   const createPeer = async (initiator, streamParam, toIdForCandidates) => {
     const peer = new RTCPeerConnection(rtcConfig);
 
@@ -73,9 +98,15 @@ export const useSimpleCall = (socket, callerId, selfId, onCallReceived, onCallEn
     peer.oniceconnectionstatechange = () => {
       console.log('[RTC] iceConnectionState =', peer.iceConnectionState);
       setIsConnected(peer.iceConnectionState === 'connected' || peer.iceConnectionState === 'completed');
+      if (peer.iceConnectionState === 'connected' || peer.iceConnectionState === 'completed') {
+        ensureSending();
+      }
     };
     peer.onconnectionstatechange = () => {
       console.log('[RTC] connectionState =', peer.connectionState);
+      if (peer.connectionState === 'connected') {
+        ensureSending();
+      }
     };
 
     peer.ontrack = (event) => {
@@ -94,6 +125,7 @@ export const useSimpleCall = (socket, callerId, selfId, onCallReceived, onCallEn
     if (initiator) {
       const offer = await peer.createOffer();
       await peer.setLocalDescription(offer);
+      await ensureSending();
       console.log('[SIGNAL] emit callUser ->', callerId);
       socket.emit('callUser', { userToCall: callerId, signalData: offer, from: selfId });
     }
@@ -110,6 +142,7 @@ export const useSimpleCall = (socket, callerId, selfId, onCallReceived, onCallEn
       try { await audioSenderRef.current?.replaceTrack(a); } catch {}
       try { await videoSenderRef.current?.replaceTrack(v); } catch {}
       console.log('[RTC] (effect) re-attached tracks', { hasA: !!a, hasV: !!v });
+      await ensureSending();
     };
     apply();
   }, [localStream]);
@@ -190,6 +223,7 @@ export const useSimpleCall = (socket, callerId, selfId, onCallReceived, onCallEn
     await drainPendingCandidates();
     const answerDesc = await peer.createAnswer();
     await peer.setLocalDescription(answerDesc);
+    await ensureSending();
     console.log('[SIGNAL] emit acceptCall ->', targetId);
     if (targetId) socket.emit('acceptCall', { signal: answerDesc, to: targetId });
     startStatsLogging();
@@ -235,6 +269,7 @@ export const useSimpleCall = (socket, callerId, selfId, onCallReceived, onCallEn
       peerRef.current?.setRemoteDescription(signal);
       remoteDescSetRef.current = true;
       drainPendingCandidates();
+      ensureSending();
     };
     const handleIceCandidate = (candidate) => {
       console.log('[SIGNAL] on iceCandidate');
