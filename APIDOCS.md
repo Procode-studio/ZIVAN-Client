@@ -1,178 +1,86 @@
-# ZIVAN Customization Guide
+# ZIVAN — Документация для клиента
 
-This guide explains how to customize the ZIVAN web client UI safely, without exposing any sensitive data. It does not cover server configuration.
+Этот документ описывает, как работает веб‑клиент ZIVAN: авторизация, чаты, сообщения, статусы, присутствие, печать, звонки (WebRTC) и взаимодействие с публичным клиентским API. Здесь нет внутренних деталей сервера и секретов — только то, что нужно для разработки и интеграции клиентского UI.
 
-## Goals
-- Keep the client clean and privacy‑oriented (no secrets, no credentials).
-- Allow quick theming and layout tweaks.
-- Provide stable integration points for REST and Socket.IO.
+## 1. Общее устройство
+- Клиент — это SPA на React + Vite.
+- Аутентификация — по JWT, передаётся в каждом запросе в заголовке `Authorization: Bearer <JWT>`.
+- Реалтайм — через Socket.IO: новые сообщения, индикатор печати, онлайн‑статус, сигнальные события для звонков.
+- Звонки — WebRTC: клиент получает ICE‑настройки (STUN/TURN) по защищённому эндпоинту и обменивается SDP/ICE через Socket.IO.
 
-## Project Structure (client)
-- `zivan-client/src/pages/`
-  - `LoginPage.jsx` — login/registration screen.
-  - `ChatPage.jsx` — main chat UI, message list, creating chats, presence, calls.
-- `zivan-client/src/components/`
-  - `MessageList.jsx` — list + composer.
-  - `ChatHeader.jsx`, `CreateChatModal.jsx`, call UI components, etc.
-  - `TurnSettingsModal.jsx` — optional admin UI (only shows for a configured admin user id — UI hint only).
-- `zivan-client/src/hooks/`
-  - `useSocket.js` — Socket.IO setup and event wiring.
-  - `useSimpleCall.js` — WebRTC (ICE fetch + call flow). No secrets are embedded.
-- `zivan-client/src/api/`
-  - `index.js` — minimal Axios wrapper that prepends `VITE_API_URL`.
-  - `authApi.js`, `chatApi.js` — typed helper calls.
-- `zivan-client/src/pages/*.css` — basic styles for pages.
-
-## Theming and UI
-- Colors/spacing/fonts — adjust in CSS files under `src/pages/*.css` and component‑specific CSS.
-- Components are small and composable — feel free to replace structure or add new sections.
-- Keep accessibility in mind: labels for inputs, proper button semantics.
-
-## API Integration (safe usage)
-- Base URL comes from build‑time env `VITE_API_URL`.
-- Auth token is read from `localStorage` and attached as a header by `src/api/index.js`.
-- Do not store or hardcode any secrets in the client.
-- Do not add new privileged controls without the server enforcing permissions. The client should only reflect state allowed by the backend.
-
-### REST helpers
-- See `src/api/*.js` for minimal wrappers:
-  - `authApi.js`: login, register.
-  - `chatApi.js`: get chats/messages, create chat, mark delivered/read.
-
-### Realtime (Socket.IO)
-- `useSocket.js` wires up connection using the token.
-- Event handlers are passed as props; extend safely with new events as needed.
-
-### WebRTC (Calls)
-- `useSimpleCall.js` handles ICE config fetch and peer connection.
-- No credentials are embedded; the client only receives time‑limited ICE parameters from an API endpoint.
-
-## Environment
-Create `zivan-client/.env` (example):
+## 2. Авторизация
+1) Регистрация (опционально):
 ```
-VITE_API_URL=https://zivan.ddns.net
+POST /api/auth/register
+{ "login": "user1", "password": "secret", "displayName": "Иван" }
 ```
+Ответ содержит созданного пользователя.
 
-## Build & Deploy (static client)
-- Development: `npm run dev` (Vite dev server)
-- Production build: `npm run build` → dist/
-- You can host `dist/` on any static hosting (Vercel, Netlify, Nginx, etc.).
-
-## Security Checklist
-- Never commit secrets or tokens.
-- Keep token lifetime short on the server; the client will re‑login as needed.
-- Treat admin UI purely as a hint — actual permissions must be enforced on the backend.
-- Validate all user input server‑side. The client should not assume trust.
-
-## Code Style
-- Keep components small and focused.
-- Prefer hooks for shared logic.
-- Use minimal logging in production; avoid printing sensitive data to the console.
-
-## Extending the Client
-- Add new pages under `src/pages/` and route from your shell app/router (if you add one).
-- Add UI state (badges, unread counters, etc.) by extending `ChatPage.jsx` and related components.
-- For new REST endpoints, add a function under `src/api/` and call it from your pages/components.
-
-Happy customizing! This client is intentionally simple to help you build your own UI quickly and safely.
-
-
-# ZIVAN Client API (Public Contract)
-
-This document describes the minimal API that a third‑party web client needs to integrate with ZIVAN. Authentication is JWT‑based, passed in the `Authorization` header. No cookies are required.
-
-All examples assume a base URL:
+2) Вход:
 ```
-BASE=https://zivan.ddns.net
+POST /api/auth/login
+{ "login": "user1", "password": "secret" }
 ```
-
-## Auth
-
-- POST `${BASE}/api/auth/login`
-  - Body (JSON):
-    ```json
-    { "login": "user1", "password": "secret" }
-    ```
-  - Response (200):
-    ```json
-    { "token": "<JWT>" }
-    ```
-
-- POST `${BASE}/api/auth/register`
-  - Body (JSON):
-    ```json
-    { "login": "user1", "password": "secret", "displayName": "Alice" }
-    ```
-  - Response (201):
-    ```json
-    { "message": "User registered successfully", "user": {"id": 1, "login": "user1", "display_name": "Alice"} }
-    ```
-
-Include the token in subsequent requests:
+Ответ:
+```
+{ "token": "<JWT>" }
+```
+Сохраните `token` (например, `localStorage`) и добавляйте в каждый запрос:
 ```
 Authorization: Bearer <JWT>
 ```
 
-## Chats
-
-- GET `${BASE}/api/chats`
-  - Headers: `Authorization: Bearer <JWT>`
-  - Response:
-    ```json
-    [
-      {
-        "id": 10,
-        "type": "private",
-        "name": null,
-        "members": [
-          { "id": 1, "username": "Alice", "login": "alice" },
-          { "id": 2, "username": "Bob",   "login": "bob"   }
-        ]
-      }
+## 3. Чаты
+- Получить список чатов:
+```
+GET /api/chats
+Headers: Authorization: Bearer <JWT>
+```
+Пример ответа:
+```json
+[
+  {
+    "id": 10,
+    "type": "private",
+    "name": null,
+    "members": [
+      { "id": 1, "username": "Иван", "login": "ivan" },
+      { "id": 2, "username": "Ольга", "login": "olga" }
     ]
-    ```
+  }
+]
+```
+- Создать чат:
+```json
+POST /api/chats
+{ "name": "Новый чат", "type": "private", "memberIds": [2] }
+```
+Ответ: `{ "message": "Chat created successfully", "chatId": 11 }`
 
-- POST `${BASE}/api/chats`
-  - Body:
-    ```json
-    { "name": "My chat", "type": "private", "memberIds": [2] }
-    ```
-  - Response (201):
-    ```json
-    { "message": "Chat created successfully", "chatId": 11 }
-    ```
+## 4. Сообщения
+- Получить сообщения чата:
+```
+GET /api/messages/:chatId
+```
+Ответ (пример):
+```json
+[
+  { "id": 1, "chat_id": 10, "sender_id": 1, "content": "Привет", "type": "text", "status": "sent", "timestamp": "2025-09-12T10:00:00Z" }
+]
+```
+- Отметить входящие как доставленные:
+```
+POST /api/messages/:chatId/delivered
+```
+- Отметить входящие как прочитанные:
+```
+POST /api/messages/:chatId/read
+```
 
-## Messages
+В текущей упрощённой модели статус хранится «на чат», не по каждому получателю. Для большинства простых UI этого достаточно.
 
-- GET `${BASE}/api/messages/:chatId`
-  - Response:
-    ```json
-    [
-      { "id": 1, "chat_id": 10, "sender_id": 1, "content": "hi", "type": "text", "status": "sent", "timestamp": "2025-09-12T10:00:00Z" }
-    ]
-    ```
-
-- POST `${BASE}/api/messages/:chatId/delivered`
-  - Marks all incoming (not your) messages in this chat as delivered.
-  - Response: `{ "updated": 3 }`
-
-- POST `${BASE}/api/messages/:chatId/read`
-  - Marks all incoming (not your) messages in this chat as read.
-  - Response: `{ "updated": 3 }`
-
-Realtime send uses Socket.IO (see below).
-
-## WebRTC ICE (Calls)
-
-- GET `${BASE}/api/config/ice`
-  - Returns STUN/TURN configuration with time‑limited credentials (no secrets in client):
-    ```json
-    { "iceServers": [ {"urls": "stun:stun.l.google.com:19302"}, {"urls": "turn:host:3478", "username": "...", "credential": "..."} ] }
-    ```
-
-## Socket.IO
-
-Connect with token:
+## 5. Реалтайм через Socket.IO
+Подключение:
 ```js
 import io from 'socket.io-client';
 const socket = io(BASE, {
@@ -180,46 +88,96 @@ const socket = io(BASE, {
   transports: ['websocket', 'polling']
 });
 ```
-
-Events:
-- `newMessage` (server -> client)
-  - Payload: same shape as in GET messages
-- `userTyping` / `userStoppedTyping` (server -> client)
-  - Payload: `{ userId: number, chatId: number }`
-- `updateOnlineUsers` (server -> client)
-  - Payload: `number[]` of online user ids
-
-API over Socket.IO:
-- Join room (chat):
-  ```js
-  socket.emit('joinRoom', chatId);
-  ```
-- Send message:
-  ```js
-  socket.emit('sendMessage', { chatId, content: 'hello', type: 'text' });
-  ```
-- Typing:
-  ```js
-  socket.emit('startTyping', { chatId });
-  socket.emit('stopTyping', { chatId });
-  ```
-- Calls (signaling):
-  - `callUser` → server relays `{ signalData, from }` to target via `hey`
-  - `acceptCall` → server relays answer via `callAccepted`
-  - `iceCandidate` → server relays `{ candidate }`
-  - Optional renegotiation: `renegotiate` / `renegotiateAnswer`
-
-Client listeners (examples):
+- Вступить в комнату чата:
 ```js
-socket.on('hey', ({ signal, from }) => { /* setRemoteDescription(offer) */ });
-socket.on('callAccepted', (answer) => { /* setRemoteDescription(answer) */ });
-socket.on('iceCandidate', (candidate) => { /* addIceCandidate */ });
+socket.emit('joinRoom', chatId);
+```
+- Отправить сообщение:
+```js
+socket.emit('sendMessage', { chatId, content: 'Привет!', type: 'text' });
+```
+- Печать:
+```js
+socket.emit('startTyping', { chatId });
+socket.emit('stopTyping', { chatId });
+```
+- События клиента:
+```js
+socket.on('newMessage', (msg) => { /* добавить в список */ });
+socket.on('userTyping', ({ userId, chatId }) => { /* показать печать */ });
+socket.on('userStoppedTyping', ({ userId, chatId }) => { /* скрыть печать */ });
+socket.on('updateOnlineUsers', (ids) => { /* обновить индикаторы онлайн */ });
 ```
 
-## Errors
-- HTTP: standard 4xx / 5xx JSON with `message` or `error`.
-- Socket.IO: specific `*Error` events (e.g., `joinRoomError`, `sendMessageError`).
+## 6. Индикаторы: онлайн и печать
+- Онлайн: сервер периодически уведомляет `updateOnlineUsers` — это список ID онлайн‑пользователей. Сопоставьте с участниками чата и отрисуйте зелёную точку/статус.
+- Печать: при вводе отправляйте `startTyping`, при паузе — `stopTyping`. Клиент по событию показывает «Печатает…» у собеседника.
 
-## Notes
-- All sensitive operations are authorized server‑side; the client only needs JWT.
-- CORS: in public client mode the server allows any Origin; clients should rely on the `Authorization` header only (no cookies required).
+## 7. Голос/Видео звонки (WebRTC)
+1) Получение ICE‑конфигурации (STUN/TURN):
+```
+GET /api/config/ice
+Headers: Authorization: Bearer <JWT>
+```
+Ответ (пример):
+```json
+{
+  "iceServers": [
+    { "urls": "stun:stun.l.google.com:19302" },
+    { "urls": "turn:host:3478", "username": "...", "credential": "..." }
+  ]
+}
+```
+Учётки TURN краткоживущие и выдаются динамически. Хранить секреты в клиенте не нужно.
+
+2) Базовый поток звонка (сигналинг через Socket.IO):
+- Звонящий:
+  - создаёт `RTCPeerConnection` с `iceServers`;
+  - добавляет свои трэки (микрофон/камера);
+  - делает offer и отправляет его через `socket.emit('callUser', { userToCall, signalData: offer, from: selfId })`;
+- Принимающий:
+  - получает `socket.on('hey', ({ signal, from }))`;
+  - создаёт `RTCPeerConnection`, добавляет свои трэки;
+  - `setRemoteDescription(offer)`, делает answer и отправляет `socket.emit('acceptCall', { signal: answer, to: from })`;
+- ICE‑кандидаты:
+  - обе стороны шлют `socket.emit('iceCandidate', { to, candidate })`;
+  - принимающая сторона добавляет `peer.addIceCandidate(candidate)`.
+
+Пример упрощённого кода см. в `zivan-client/src/hooks/useSimpleCall.js`.
+
+## 8. Рекомендации по производительности и лимитам
+- Кэшируйте ICE в памяти клиента хотя бы на 30–60 секунд; не запрашивайте каждую секунду.
+- Используйте сокет‑события для инкрементальных обновлений, а REST — для первичной загрузки.
+- При ретраях используйте экспоненциальную задержку и ограничение количества попыток.
+
+## 9. Безопасность
+- Только `Authorization: Bearer <JWT>` — cookies не используются.
+- Не храните секреты в клиенте.
+- Все проверки прав происходят на сервере, клиент лишь отображает доступные действия.
+
+## 10. Мини‑пример включения клиента
+```js
+// Авторизация
+const token = await fetch(`${BASE}/api/auth/login`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ login: 'user1', password: 'secret' })
+}).then(r => r.json()).then(x => x.token);
+
+// Чаты
+const chats = await fetch(`${BASE}/api/chats`, {
+  headers: { Authorization: `Bearer ${token}` }
+}).then(r => r.json());
+
+// Socket.IO
+const socket = io(BASE, { auth: { token } });
+socket.emit('joinRoom', chats[0].id);
+socket.on('newMessage', console.log);
+
+// Звонки: ICE
+const iceCfg = await fetch(`${BASE}/api/config/ice`, {
+  headers: { Authorization: `Bearer ${token}` }
+}).then(r => r.json());
+```
+
+Этого достаточно, чтобы написать свой кастомный клиент для ZIVAN и корректно взаимодействовать с публичным клиентским API.
