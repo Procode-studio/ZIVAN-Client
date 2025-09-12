@@ -8,6 +8,7 @@ import ChatHeader from '../components/ChatHeader.jsx';
 import MessageList from '../components/MessageList.jsx';
 import MinimizedCallView from '../components/MinimizedCallView.jsx';
 import { useSimpleCall } from '../hooks/useSimpleCall.js';
+import TurnSettingsModal from '../components/TurnSettingsModal.jsx';
 import './ChatPage.css';
 
 function ChatPage({ userId }) {
@@ -16,6 +17,7 @@ function ChatPage({ userId }) {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState(new Set());
   const [typingUsers, setTypingUsers] = useState({});
   const [loadingChats, setLoadingChats] = useState(true);
@@ -53,6 +55,11 @@ function ChatPage({ userId }) {
   const isOtherUserOnline = otherUser ? onlineUsers.has(otherUser.id) : false;
   const isOtherUserTyping = otherUser ? typingUsers[otherUser.id] : false;
 
+  // Показывать кнопку настроек только администратору (UI-гейтинг; сервер всё равно защищён)
+  const isAdminUI = import.meta.env.VITE_ADMIN_USER_ID
+    ? String(userId) === String(import.meta.env.VITE_ADMIN_USER_ID)
+    : false;
+
   const { localStream, remoteStream, call, answer, end, isConnected, toggleMic, toggleCamera, isMicOn, isCameraOn } = useSimpleCall(
     socket,
     otherUser?.id,
@@ -74,9 +81,15 @@ function ChatPage({ userId }) {
   useEffect(() => {
     const fetchChats = async () => {
       setLoadingChats(true);
-      const fetchedChats = await getChats();
-      setChats(fetchedChats);
-      setLoadingChats(false);
+      try {
+        const fetched = await getChats();
+        setChats(Array.isArray(fetched) ? fetched : []);
+      } catch (e) {
+        console.warn('[Chats] fetch error', e);
+        setChats([]);
+      } finally {
+        setLoadingChats(false);
+      }
     };
     fetchChats();
   }, []);
@@ -94,9 +107,15 @@ function ChatPage({ userId }) {
     setIsMobileListOpen(false);
     setLoadingMessages(true);
     setMessages([]);
-    const chatMessages = await getMessages(chat.id);
-    setMessages(chatMessages);
-    setLoadingMessages(false);
+    try {
+      const chatMessages = await getMessages(chat.id);
+      setMessages(Array.isArray(chatMessages) ? chatMessages : []);
+    } catch (e) {
+      console.warn('[Messages] fetch error', e);
+      setMessages([]);
+    } finally {
+      setLoadingMessages(false);
+    }
     joinRoom(chat.id);
   };
 
@@ -175,13 +194,13 @@ function ChatPage({ userId }) {
       </header>
 
       <button className="new-chat-btn" onClick={() => setIsModalOpen(true)}>+ Новый чат</button>
-      {isModalOpen && <CreateChatModal onClose={() => setIsModalOpen(false)} onChatCreated={() => getChats().then(setChats)} />}
+      {isModalOpen && <CreateChatModal onClose={() => setIsModalOpen(false)} onChatCreated={() => getChats().then(res => setChats(Array.isArray(res) ? res : []))} />}
 
       <div className="chat-container">
         <aside className={`chat-list ${isMobileListOpen ? 'open' : ''}`}>
           {loadingChats ? (
             <p>Загрузка чатов...</p>
-          ) : (
+          ) : Array.isArray(chats) && chats.length ? (
             chats.map(chat => (
               <div
                 key={chat.id}
@@ -191,6 +210,8 @@ function ChatPage({ userId }) {
                 <h3>{chat.name || chat.members.find(m => m.id !== userId)?.username || 'Чат'}</h3>
               </div>
             ))
+          ) : (
+            <p>Чатов пока нет</p>
           )}
         </aside>
         {isMobileListOpen && <div className="chat-list-overlay" onClick={() => setIsMobileListOpen(false)} />}
@@ -204,6 +225,7 @@ function ChatPage({ userId }) {
             isCalling={isCalling}
             callAccepted={callAccepted}
             receivingCall={receivingCall}
+            onOpenSettings={isAdminUI ? () => setIsSettingsOpen(true) : undefined}
           />
           <MessageList
             selectedChat={selectedChat}
@@ -217,6 +239,10 @@ function ChatPage({ userId }) {
           />
         </main>
       </div>
+
+      {isSettingsOpen && (
+        <TurnSettingsModal onClose={() => setIsSettingsOpen(false)} />
+      )}
 
       <CallNotification
         receivingCall={receivingCall}

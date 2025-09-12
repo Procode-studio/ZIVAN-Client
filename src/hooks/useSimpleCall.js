@@ -12,25 +12,68 @@ export const useSimpleCall = (socket, callerId, selfId, onCallReceived, onCallEn
   const incomingFromRef = useRef(null);
   const [rtcConfig, setRtcConfig] = useState({
     iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+      { urls: 'stun:stun.l.google.com:19302' }
     ],
   });
   const statsIntervalRef = useRef(null);
   const pendingCandidatesRef = useRef([]);
   const remoteDescSetRef = useRef(false);
   const zeroOutCounterRef = useRef(0);
+  const iceFetchTimerRef = useRef(null);
 
+  // Fetch ICE config when API is set and token is available (with retries and storage listener)
   useEffect(() => {
     const api = import.meta.env.VITE_API_URL;
     if (!api) return;
-    fetch(`${api}/api/config/ice`).then(async (r) => {
-      if (!r.ok) return;
-      const cfg = await r.json();
-      if (cfg && cfg.iceServers && Array.isArray(cfg.iceServers)) {
-        setRtcConfig(cfg);
+
+    const fetchIce = async (tk) => {
+      try {
+        const r = await fetch(`${api}/api/config/ice`, {
+          headers: tk ? { Authorization: `Bearer ${tk}` } : {},
+          credentials: 'include',
+        });
+        if (!r.ok) {
+          console.warn('[ICE] fetch failed', r.status);
+          return false;
+        }
+        const cfg = await r.json();
+        if (cfg && cfg.iceServers && Array.isArray(cfg.iceServers) && cfg.iceServers.length) {
+          setRtcConfig(cfg);
+          console.log('[ICE] remote config applied', cfg);
+          return true;
+        }
+        return false;
+      } catch (e) {
+        console.warn('[ICE] fetch error', e);
+        return false;
       }
-    }).catch(() => {});
+    };
+
+    let attempts = 0;
+    const tryFetch = async () => {
+      const token = localStorage.getItem('token');
+      const ok = await fetchIce(token);
+      if (!ok && attempts < 5) {
+        attempts += 1;
+        iceFetchTimerRef.current = setTimeout(tryFetch, 1500);
+      }
+    };
+
+    // initial attempt
+    tryFetch();
+
+    // listen for token changes across tabs or after login
+    const onStorage = (e) => {
+      if (e.key === 'token') {
+        const tk = e.newValue;
+        if (tk) fetchIce(tk);
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      if (iceFetchTimerRef.current) clearTimeout(iceFetchTimerRef.current);
+    };
   }, []);
 
   const getMedia = async () => {

@@ -1,7 +1,7 @@
 import React from 'react';
 import Avatar from './Avatar.jsx';
 
-function ChatHeader({ selectedChat, otherUser, isOtherUserOnline, isOtherUserTyping, onCall, isCalling, callAccepted, receivingCall }) {
+function ChatHeader({ selectedChat, otherUser, isOtherUserOnline, isOtherUserTyping, onCall, isCalling, callAccepted, receivingCall, onOpenSettings }) {
   if (!selectedChat) return null;
 
   return (
@@ -19,6 +19,16 @@ function ChatHeader({ selectedChat, otherUser, isOtherUserOnline, isOtherUserTyp
             className="call-btn"
           >
             📞
+          </button>
+        )}
+        {onOpenSettings && (
+          <button
+            onClick={onOpenSettings}
+            className="settings-btn"
+            title="Настройки"
+            style={{ marginLeft: 8 }}
+          >
+            ⚙️
           </button>
         )}
       </div>
