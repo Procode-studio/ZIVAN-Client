@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { getChats, getMessages } from '../api/chatApi';
+import { getChats, getMessages, markDelivered, markRead } from '../api/chatApi';
 import { useSocket } from '../hooks/useSocket';
 import CreateChatModal from '../components/CreateChatModal.jsx';
 import CallInterface from '../components/CallInterface.jsx';
@@ -32,8 +32,13 @@ function ChatPage({ userId }) {
     useCallback((message) => {
       if (selectedChat && message.chat_id === selectedChat.id) {
         setMessages((prev) => [...prev, message]);
+        if (message.sender_id !== userId) {
+          // Fire-and-forget: mark delivered/read for incoming message in open chat
+          markDelivered(selectedChat.id).catch(() => {});
+          markRead(selectedChat.id).catch(() => {});
+        }
       }
-    }, [selectedChat]),
+    }, [selectedChat, userId]),
     useCallback(({ userId, chatId }) => {
       if (selectedChat?.id === chatId) {
         setTypingUsers(prev => ({ ...prev, [userId]: true }));
@@ -110,6 +115,9 @@ function ChatPage({ userId }) {
     try {
       const chatMessages = await getMessages(chat.id);
       setMessages(Array.isArray(chatMessages) ? chatMessages : []);
+      // Помечаем входящие как доставленные/прочитанные при открытии чата
+      markDelivered(chat.id).catch(() => {});
+      markRead(chat.id).catch(() => {});
     } catch (e) {
       console.warn('[Messages] fetch error', e);
       setMessages([]);

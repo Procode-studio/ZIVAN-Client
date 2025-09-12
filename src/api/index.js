@@ -1,23 +1,19 @@
 import axios from 'axios';
 
-// Базовый URL теперь просто переменная
 const API_URL = import.meta.env.VITE_API_URL;
 
-const apiClient = axios.create(); // Создаем клиент без baseURL
+const apiClient = axios.create();
 
-// Перехватчик для токена остается без изменений
 apiClient.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   if (token) {
-    config.headers['x-auth-token'] = token;
+    config.headers['Authorization'] = `Bearer ${token}`;
   }
+  config.baseURL = API_URL;
   return config;
 });
 
-// --- НОВАЯ ФУНКЦИЯ-ПОМОЩНИК ---
-// Она будет добавлять базовый URL к каждому запросу
-const get = (url, config) => apiClient.get(`${API_URL}${url}`, config);
-const post = (url, data, config) => apiClient.post(`${API_URL}${url}`, data, config);
-// Можно добавить put, delete и т.д., если понадобятся
+const get = (url, config) => apiClient.get(url, config);
+const post = (url, data, config) => apiClient.post(url, data, config);
 
 export { get, post }; 

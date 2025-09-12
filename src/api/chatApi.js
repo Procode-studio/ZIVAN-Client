@@ -18,3 +18,13 @@ export const createChat = async (name, memberIds) => {
   });
   return response.data;
 };
+
+export const markDelivered = async (chatId) => {
+  const response = await post(`/api/messages/${chatId}/delivered`);
+  return response.data;
+};
+
+export const markRead = async (chatId) => {
+  const response = await post(`/api/messages/${chatId}/read`);
+  return response.data;
+};

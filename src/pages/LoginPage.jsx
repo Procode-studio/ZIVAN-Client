@@ -5,6 +5,7 @@ import './LoginPage.css';
 function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
@@ -26,7 +27,7 @@ function LoginPage() {
     setError('');
     setMessage('');
     try {
-      const data = await register(username, password);
+      const data = await register(username, password, displayName);
       setMessage(data.message);
     } catch (err) {
       setError(err.response?.data?.message || 'Произошла ошибка при регистрации');
@@ -38,7 +39,7 @@ function LoginPage() {
       <h1>Вход или Регистрация</h1>
       <form className="login-form">
         <div className="form-group">
-          <label htmlFor="username">Имя пользователя:</label>
+          <label htmlFor="username">Логин:</label>
           <input
             id="username"
             type="text"
@@ -55,6 +56,16 @@ function LoginPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
+          />
+        </div>
+        <div className="form-group">
+          <label htmlFor="displayName">Отображаемое имя (при регистрации):</label>
+          <input
+            id="displayName"
+            type="text"
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            placeholder="Например: Иван"
           />
         </div>
         <div className="form-actions">

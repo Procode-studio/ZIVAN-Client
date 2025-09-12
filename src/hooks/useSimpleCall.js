@@ -30,7 +30,6 @@ export const useSimpleCall = (socket, callerId, selfId, onCallReceived, onCallEn
       try {
         const r = await fetch(`${api}/api/config/ice`, {
           headers: tk ? { Authorization: `Bearer ${tk}` } : {},
-          credentials: 'include',
         });
         if (!r.ok) {
           console.warn('[ICE] fetch failed', r.status);
