@@ -50,9 +50,7 @@ This guide explains how to customize the ZIVAN web client UI safely, without exp
 ## Environment
 Create `zivan-client/.env` (example):
 ```
-VITE_API_URL=https://your.zivan.domain
-# Optional: show admin UI button for a particular id (UI‑only hint)
-# VITE_ADMIN_USER_ID=1
+VITE_API_URL=https://zivan.ddns.net
 ```
 
 ## Build & Deploy (static client)
